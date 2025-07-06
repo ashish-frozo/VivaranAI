@@ -1,0 +1,61 @@
+GOVERNMENT MEDICAL COLLEGE & HOSPITAL
+Sector 32, Chandigarh
+Medical Bill Summary
+
+Patient: Priya Sharma
+Date: 2023-11-20
+Doctor: Dr. R.K. Gupta (General Medicine)
+Patient ID: GMCH2023/11/1247
+
+ITEMIZED CHARGES:
+=================
+
+1. OPD Consultation - General Medicine
+   Rate: ₹50.00
+   Qty: 1
+   Total: ₹50.00
+
+2. Complete Blood Count (CBC)
+   Rate: ₹150.00
+   Qty: 1
+   Total: ₹150.00
+
+3. Urine Routine Examination
+   Rate: ₹75.00
+   Qty: 1
+   Total: ₹75.00
+
+4. Blood Sugar (Random)
+   Rate: ₹50.00
+   Qty: 1
+   Total: ₹50.00
+
+5. Chest X-Ray (PA View)
+   Rate: ₹200.00
+   Qty: 1
+   Total: ₹200.00
+
+6. ECG
+   Rate: ₹100.00
+   Qty: 1
+   Total: ₹100.00
+
+7. Registration Fee
+   Rate: ₹25.00
+   Qty: 1
+   Total: ₹25.00
+
+8. Medical Certificate
+   Rate: ₹20.00
+   Qty: 1
+   Total: ₹20.00
+
+SUBTOTAL: ₹670.00
+TAX: ₹0.00 (Government Hospital - Tax Exempt)
+TOTAL AMOUNT: ₹670.00
+
+Payment Method: Cash
+Status: PAID
+
+Government hospitals provide affordable healthcare for all citizens.
+Keep this receipt for insurance claims. 

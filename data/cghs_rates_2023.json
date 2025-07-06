@@ -1,0 +1,94 @@
+{
+  "rates": [
+    {
+      "code": "CGHS-CONS-001",
+      "name": "Consultation - General Medicine",
+      "category": "consultation",
+      "rate": 500.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-CONS-002",
+      "name": "Consultation - Specialist",
+      "category": "consultation",
+      "rate": 800.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-DIAG-001",
+      "name": "Blood Test - Complete Blood Count (CBC)",
+      "category": "diagnostic",
+      "rate": 200.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-DIAG-002",
+      "name": "X-Ray - Chest PA View",
+      "category": "diagnostic",
+      "rate": 300.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-DIAG-003",
+      "name": "ECG - Electrocardiogram",
+      "category": "diagnostic",
+      "rate": 150.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-DIAG-004",
+      "name": "Ultrasound - Abdomen",
+      "category": "diagnostic",
+      "rate": 800.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-PROC-001",
+      "name": "Minor Surgery - Suturing",
+      "category": "procedure",
+      "rate": 1500.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-ROOM-001",
+      "name": "Room Charges - General Ward (per day)",
+      "category": "accommodation",
+      "rate": 500.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-ROOM-002",
+      "name": "Room Charges - Private Room (per day)",
+      "category": "accommodation",
+      "rate": 1200.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "CGHS-NURS-001",
+      "name": "Nursing Charges (per day)",
+      "category": "nursing",
+      "rate": 300.0,
+      "source": "CGHS",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    }
+  ]
+} 

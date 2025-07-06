@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBillGuard - Medical Bill Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div x-data="medBillAnalyzer()" class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-blue-600 mb-2">
+                <i class="fas fa-shield-alt mr-3"></i>MedBillGuard
+            </h1>
+            <p class="text-gray-600 text-lg">AI-powered medical bill analysis and overcharge detection</p>
+        </div>
+
+        <!-- Status Card -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800">API Status</h2>
+                    <p class="text-gray-600">Backend service health</p>
+                </div>
+                <div class="flex items-center">
+                    <div :class="apiStatus === 'healthy' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
+                         class="px-3 py-1 rounded-full text-sm font-medium">
+                        <i :class="apiStatus === 'healthy' ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'" class="mr-1"></i>
+                        <span x-text="apiStatus === 'healthy' ? 'Healthy' : 'Offline'"></span>
+                    </div>
+                    <button @click="checkHealth()" class="ml-3 text-blue-600 hover:text-blue-800">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-upload mr-2"></i>Upload Medical Bill
+            </h2>
+            
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <input type="file" 
+                       @change="handleFileSelect" 
+                       accept=".pdf,.jpg,.jpeg,.png"
+                       class="hidden" 
+                       id="fileInput">
+                
+                <label for="fileInput" class="cursor-pointer">
+                    <div class="mb-4">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400"></i>
+                    </div>
+                    <p class="text-lg text-gray-600 mb-2">Click to upload or drag and drop</p>
+                    <p class="text-sm text-gray-500">PDF, JPEG, PNG files up to 15MB</p>
+                </label>
+                
+                <div x-show="selectedFile" class="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <p class="text-sm text-blue-800">
+                        <i class="fas fa-file mr-2"></i>
+                        <span x-text="selectedFile?.name"></span>
+                        (<span x-text="formatFileSize(selectedFile?.size)"></span>)
+                    </p>
+                </div>
+            </div>
+
+            <!-- Analysis Options -->
+            <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Document Language</label>
+                    <select x-model="language" class="w-full p-2 border border-gray-300 rounded-md">
+                        <option value="en">English</option>
+                        <option value="hi">Hindi</option>
+                        <option value="bn">Bengali</option>
+                        <option value="ta">Tamil</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">State Code</label>
+                    <select x-model="stateCode" class="w-full p-2 border border-gray-300 rounded-md">
+                        <option value="">Select State</option>
+                        <option value="DL">Delhi</option>
+                        <option value="MH">Maharashtra</option>
+                        <option value="KA">Karnataka</option>
+                        <option value="TN">Tamil Nadu</option>
+                        <option value="WB">West Bengal</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Document ID</label>
+                    <input type="text" 
+                           x-model="docId" 
+                           placeholder="Auto-generated"
+                           class="w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+
+            <!-- Analyze Button -->
+            <div class="mt-6">
+                <button @click="analyzeDocument()" 
+                        :disabled="!selectedFile || isAnalyzing"
+                        :class="!selectedFile || isAnalyzing ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'"
+                        class="w-full text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
+                    <span x-show="!isAnalyzing">
+                        <i class="fas fa-search mr-2"></i>Analyze Medical Bill
+                    </span>
+                    <span x-show="isAnalyzing">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>Analyzing...
+                    </span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Quick Test Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-bolt mr-2"></i>Quick Test
+            </h2>
+            <p class="text-gray-600 mb-4">Test the API with a sample medical bill (no file upload required)</p>
+            <button @click="runQuickTest()" 
+                    :disabled="isAnalyzing"
+                    class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
+                <i class="fas fa-play mr-2"></i>Run Quick Test
+            </button>
+        </div>
+
+        <!-- Results Section -->
+        <div x-show="analysisResult" class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-chart-line mr-2"></i>Analysis Results
+            </h2>
+            
+            <!-- Verdict Badge -->
+            <div class="mb-6">
+                <div :class="{
+                    'bg-green-100 text-green-800': analysisResult?.verdict === 'ok',
+                    'bg-yellow-100 text-yellow-800': analysisResult?.verdict === 'warning', 
+                    'bg-red-100 text-red-800': analysisResult?.verdict === 'critical'
+                }" class="inline-flex items-center px-4 py-2 rounded-full text-lg font-semibold">
+                    <i :class="{
+                        'fas fa-check-circle': analysisResult?.verdict === 'ok',
+                        'fas fa-exclamation-triangle': analysisResult?.verdict === 'warning',
+                        'fas fa-times-circle': analysisResult?.verdict === 'critical'
+                    }" class="mr-2"></i>
+                    <span x-text="analysisResult?.verdict?.toUpperCase()"></span>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <h3 class="text-sm font-medium text-blue-800 mb-1">Total Bill Amount</h3>
+                    <p class="text-2xl font-bold text-blue-900">
+                        ₹<span x-text="analysisResult?.totalBillAmount?.toLocaleString()"></span>
+                    </p>
+                </div>
+                
+                <div class="bg-red-50 p-4 rounded-lg">
+                    <h3 class="text-sm font-medium text-red-800 mb-1">Total Overcharge</h3>
+                    <p class="text-2xl font-bold text-red-900">
+                        ₹<span x-text="analysisResult?.totalOverchargeAmount?.toLocaleString()"></span>
+                    </p>
+                </div>
+                
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <h3 class="text-sm font-medium text-green-800 mb-1">Confidence Score</h3>
+                    <p class="text-2xl font-bold text-green-900">
+                        <span x-text="Math.round((analysisResult?.confidenceScore || 0) * 100)"></span>%
+                    </p>
+                </div>
+            </div>
+
+            <!-- Red Flags -->
+            <div x-show="analysisResult?.redFlags?.length > 0" class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">
+                    <i class="fas fa-flag text-red-500 mr-2"></i>Issues Detected
+                </h3>
+                <div class="space-y-3">
+                    <template x-for="flag in analysisResult?.redFlags" :key="flag.item">
+                        <div class="border border-red-200 rounded-lg p-4 bg-red-50">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="font-semibold text-red-800" x-text="flag.item"></h4>
+                                <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-sm">
+                                    ₹<span x-text="flag.overcharge_amount?.toLocaleString()"></span> overcharge
+                                </span>
+                            </div>
+                            <p class="text-red-700 text-sm" x-text="flag.reason"></p>
+                            <div class="mt-2 text-xs text-red-600">
+                                Billed: ₹<span x-text="flag.billed?.toLocaleString()"></span> | 
+                                Max Allowed: ₹<span x-text="flag.max_allowed?.toLocaleString()"></span> |
+                                Confidence: <span x-text="Math.round((flag.confidence || 0) * 100)"></span>%
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Counselling Message -->
+            <div x-show="analysisResult?.counsellingMessage" class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">
+                    <i class="fas fa-user-md text-blue-500 mr-2"></i>Recommendation
+                </h3>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p class="text-blue-800" x-text="analysisResult?.counsellingMessage"></p>
+                </div>
+            </div>
+
+            <!-- Next Steps -->
+            <div x-show="analysisResult?.nextSteps?.length > 0" class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">
+                    <i class="fas fa-list-ul text-green-500 mr-2"></i>Next Steps
+                </h3>
+                <ul class="space-y-2">
+                    <template x-for="step in analysisResult?.nextSteps" :key="step">
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-green-500 mr-2 mt-1"></i>
+                            <span class="text-gray-700" x-text="step"></span>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+
+            <!-- Processing Stats -->
+            <div class="text-sm text-gray-500 border-t pt-4">
+                Processing Time: <span x-text="analysisResult?.latencyMs"></span>ms |
+                Document ID: <span x-text="analysisResult?.docId"></span>
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div x-show="error" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
+                <span class="text-red-800 font-semibold">Error</span>
+            </div>
+            <p class="text-red-700 mt-1" x-text="error"></p>
+        </div>
+    </div>
+
+    <script>
+        function medBillAnalyzer() {
+            return {
+                apiStatus: 'checking',
+                selectedFile: null,
+                language: 'en',
+                stateCode: 'DL',
+                docId: '',
+                isAnalyzing: false,
+                analysisResult: null,
+                error: null,
+
+                init() {
+                    this.checkHealth();
+                    this.docId = 'test-' + Math.random().toString(36).substr(2, 9);
+                },
+
+                async checkHealth() {
+                    try {
+                        const response = await fetch('http://localhost:8001/health');
+                        if (response.ok) {
+                            this.apiStatus = 'healthy';
+                        } else {
+                            this.apiStatus = 'offline';
+                        }
+                    } catch (error) {
+                        this.apiStatus = 'offline';
+                    }
+                },
+
+                handleFileSelect(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        if (file.size > 15 * 1024 * 1024) {
+                            this.error = 'File size must be less than 15MB';
+                            return;
+                        }
+                        this.selectedFile = file;
+                        this.error = null;
+                    }
+                },
+
+                formatFileSize(bytes) {
+                    if (!bytes) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                },
+
+                async runQuickTest() {
+                    this.isAnalyzing = true;
+                    this.error = null;
+                    this.analysisResult = null;
+
+                    try {
+                        // Test with a simple health check first
+                        const healthResponse = await fetch('http://localhost:8001/health');
+                        if (!healthResponse.ok) {
+                            throw new Error('Server is not responding');
+                        }
+                        
+                        // Create a simple test bill (using Rs instead of ₹ to avoid Unicode issues)
+                        const testBill = `
+APOLLO HOSPITALS
+Patient: Test Patient
+Date: 2025-06-30
+
+CHARGES:
+1. Consultation Fee: Rs 800.00
+2. CBC Test: Rs 400.00
+3. ECG: Rs 300.00
+
+TOTAL: Rs 1,500.00
+                        `.trim();
+                        
+                        // Encode UTF-8 string to base64 properly
+                        const base64Content = btoa(unescape(encodeURIComponent(testBill)));
+                        
+                        const testPayload = {
+                            file_content: base64Content,
+                            filename: 'quick_test.txt',
+                            language: 'english',
+                            insurance_type: 'cghs'
+                        };
+                        
+                        const response = await fetch('http://localhost:8001/analyze', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(testPayload)
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            // Transform the response to match the UI expectations
+                            this.analysisResult = {
+                                totalBillAmount: result.total_bill_amount || 1500,
+                                totalOverchargeAmount: result.total_overcharge || 0,
+                                confidenceScore: result.confidence_score || 0.85,
+                                redFlags: result.red_flags || [],
+                                counsellingMessage: result.success ? 
+                                    "Quick test completed successfully! Your analysis pipeline is working correctly." :
+                                    result.error || "Test completed with issues",
+                                nextSteps: ["Analysis system is ready for real bill processing"],
+                                latencyMs: result.processing_time_ms || 0,
+                                docId: result.analysis_id || 'quick-test'
+                            };
+                        } else {
+                            throw new Error('Quick test API call failed');
+                        }
+                    } catch (error) {
+                        this.error = 'Quick test failed: ' + error.message;
+                    } finally {
+                        this.isAnalyzing = false;
+                    }
+                },
+
+                async analyzeDocument() {
+                    if (!this.selectedFile) return;
+
+                    this.isAnalyzing = true;
+                    this.error = null;
+                    this.analysisResult = null;
+
+                    try {
+                        // Convert file to base64
+                        const fileBytes = await this.selectedFile.arrayBuffer();
+                        const uint8Array = new Uint8Array(fileBytes);
+                        let binaryString = '';
+                        for (let i = 0; i < uint8Array.length; i++) {
+                            binaryString += String.fromCharCode(uint8Array[i]);
+                        }
+                        const base64Content = btoa(binaryString);
+                        
+                        const payload = {
+                            file_content: base64Content,
+                            filename: this.selectedFile.name,
+                            language: this.language === 'en' ? 'english' : this.language,
+                            insurance_type: 'cghs',
+                            state_code: this.stateCode
+                        };
+
+                        const response = await fetch('http://localhost:8001/analyze', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            // Transform the response to match the UI expectations
+                            this.analysisResult = {
+                                totalBillAmount: result.total_bill_amount || 0,
+                                totalOverchargeAmount: result.total_overcharge || 0,
+                                confidenceScore: result.confidence_score || 0,
+                                redFlags: result.red_flags || [],
+                                counsellingMessage: result.success ? 
+                                    "Analysis completed successfully!" :
+                                    result.error || "Analysis completed with issues",
+                                nextSteps: result.recommendations || [],
+                                latencyMs: result.processing_time_ms || 0,
+                                docId: result.analysis_id || this.docId
+                            };
+                        } else {
+                            const errorData = await response.json();
+                            throw new Error(errorData.detail || errorData.error || 'Analysis failed');
+                        }
+                    } catch (error) {
+                        this.error = 'Analysis failed: ' + error.message;
+                    } finally {
+                        this.isAnalyzing = false;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html> 

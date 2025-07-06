@@ -1,0 +1,184 @@
+{
+  "rates": [
+    {
+      "code": "ESI-CONS-001",
+      "name": "Consultation - General Medicine",
+      "category": "consultation",
+      "rate": 400.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-CONS-002", 
+      "name": "Consultation - Specialist",
+      "category": "consultation",
+      "rate": 700.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-CONS-003",
+      "name": "Consultation - Super Specialist",
+      "category": "consultation",
+      "rate": 1000.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-DIAG-001",
+      "name": "Blood Test - Complete Blood Count (CBC)",
+      "category": "diagnostic",
+      "rate": 180.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-DIAG-002",
+      "name": "X-Ray - Chest PA View",
+      "category": "diagnostic",
+      "rate": 250.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-DIAG-003",
+      "name": "ECG - Electrocardiogram",
+      "category": "diagnostic",
+      "rate": 120.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-DIAG-004",
+      "name": "Ultrasound - Abdomen",
+      "category": "diagnostic",
+      "rate": 700.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-DIAG-005",
+      "name": "CT Scan - Head",
+      "category": "diagnostic",
+      "rate": 3000.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-DIAG-006",
+      "name": "MRI - Brain",
+      "category": "diagnostic",
+      "rate": 8000.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-LAB-001",
+      "name": "Blood Sugar - Fasting",
+      "category": "diagnostic",
+      "rate": 50.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-LAB-002",
+      "name": "Lipid Profile",
+      "category": "diagnostic",
+      "rate": 300.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-LAB-003",
+      "name": "Liver Function Test (LFT)",
+      "category": "diagnostic",
+      "rate": 400.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-PROC-001",
+      "name": "Minor Surgery - Suturing",
+      "category": "procedure",
+      "rate": 1200.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-PROC-002",
+      "name": "Endoscopy - Upper GI",
+      "category": "procedure",
+      "rate": 2500.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-ROOM-001",
+      "name": "Room Charges - General Ward (per day)",
+      "category": "accommodation",
+      "rate": 400.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-ROOM-002",
+      "name": "Room Charges - Semi-Private Room (per day)",
+      "category": "accommodation",
+      "rate": 800.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-ROOM-003",
+      "name": "Room Charges - ICU (per day)",
+      "category": "accommodation",
+      "rate": 2000.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-NURS-001",
+      "name": "Nursing Charges (per day)",
+      "category": "nursing",
+      "rate": 250.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-EMER-001",
+      "name": "Emergency Consultation",
+      "category": "consultation",
+      "rate": 600.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "ESI-PHYS-001",
+      "name": "Physiotherapy Session",
+      "category": "therapy",
+      "rate": 200.0,
+      "source": "ESI",
+      "state_code": null,
+      "effective_date": "2023-01-01T00:00:00Z"
+    }
+  ]
+} 

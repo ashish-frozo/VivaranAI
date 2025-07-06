@@ -1,0 +1,145 @@
+# MedBillGuardAgent - Production Configuration
+# This file overrides default settings for production deployment
+# All sensitive values should be set via environment variables
+
+# Application Settings
+app:
+  environment: "production"
+  debug: false
+
+# Server Configuration  
+server:
+  workers: 2  # Scale based on CPU cores
+  cors_enabled: false  # Strict CORS in production
+  cors_origins:
+    - "https://dashboard.vivaranai.com"
+    - "https://api.vivaranai.com"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "json"  # Structured logging for production
+  file_enabled: true
+  file_path: "/var/log/medbillguardagent/app.log"
+  console_enabled: false
+
+# Performance & Rate Limiting (Production tuning)
+performance:
+  rate_limit_per_minute: 120  # Higher limits for production
+  rate_limit_burst: 20
+  cache_enabled: true
+  cache_ttl: 7200  # 2 hours
+  concurrent_requests: 50
+
+# Database Configuration (Production settings)
+databases:
+  redis:
+    url: null  # Set via VIVARAN_REDIS_URL
+    max_connections: 50
+    timeout: 10
+    
+  vector_db:
+    path: "/data/lancedb"
+    max_vectors: 10000000  # 10M vectors for production
+    
+  audit_db:
+    enabled: true  # Enable audit logging in production
+    type: "postgresql"
+    host: null  # Set via environment
+    port: 5432
+    database: "medbillguard_audit"
+
+# LLM Configuration (Production settings)
+llm:
+  timeout: 60  # Longer timeout for production
+  retry_attempts: 5
+  
+  # Production fallback chain
+  fallback_models:
+    - "gpt-4-turbo"
+    - "gpt-3.5-turbo"
+    - "claude-3-sonnet"
+
+# OCR Configuration (Production optimized)
+ocr:
+  confidence_threshold: 70  # Higher confidence in production
+  preprocess:
+    denoise: true
+    enhance_contrast: true
+    resize_factor: 2.0  # Higher quality for production
+
+# Document Processing (Production limits)
+document:
+  max_pages: 50  # Higher limit for production
+  validation:
+    min_confidence: 0.75  # Stricter validation
+    max_processing_time: 300  # 5 minutes max
+
+# Storage Configuration (Production S3)
+storage:
+  type: "s3"
+  s3:
+    bucket: "vivaranai-medbill-docs-prod"
+    region: "ap-south-1"
+    public_read: false
+    
+# CGHS/ESI/NPPA (Production settings)
+rate_validation:
+  cghs:
+    cache_ttl: 43200  # 12 hours
+  esi:
+    cache_ttl: 43200  # 12 hours
+  nppa:
+    cache_ttl: 86400  # 24 hours
+
+# Feature Flags (Production settings)
+features:
+  flags:
+    audit_logging: true  # Enable audit logging
+    confidence_scoring: true
+
+# Monitoring & Observability (Production)
+monitoring:
+  prometheus:
+    enabled: true
+    
+  opentelemetry:
+    enabled: true
+    exporter: "otlp"
+    endpoint: "https://otel-collector.vivaranai.com"
+    
+  health_checks:
+    include_dependencies: true
+    
+  sentry:
+    enabled: true
+    environment: "production"
+
+# Event Streaming (Production NATS)
+events:
+  nats:
+    url: null  # Set via VIVARAN_NATS_URL
+    streams:
+      medbill_events:
+        retention: "limits"
+        max_age: 604800  # 7 days retention
+
+# Security Configuration (Production hardening)
+security:
+  api_keys:
+    enabled: true  # Require API keys in production
+    
+  cors:
+    allow_origins:
+      - "https://dashboard.vivaranai.com"
+      - "https://api.vivaranai.com"
+    allow_methods: ["GET", "POST", "PUT"]
+    allow_headers: ["Content-Type", "Authorization", "X-API-Key"]
+
+# Development Settings (Disabled in production)
+development:
+  auto_reload: false
+  debug_mode: false
+  mock_external_apis: false
+  sample_data_enabled: false
+  profiling_enabled: false 

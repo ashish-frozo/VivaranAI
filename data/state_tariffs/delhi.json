@@ -1,0 +1,187 @@
+{
+  "state_code": "DL",
+  "state_name": "Delhi",
+  "effective_date": "2023-01-01T00:00:00Z",
+  "rates": [
+    {
+      "code": "DL-CONS-001",
+      "name": "Consultation - General Medicine",
+      "category": "consultation",
+      "rate": 600.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-CONS-002",
+      "name": "Consultation - Specialist",
+      "category": "consultation",
+      "rate": 1000.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-CONS-003",
+      "name": "Consultation - Super Specialist",
+      "category": "consultation",
+      "rate": 1500.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-DIAG-001",
+      "name": "Blood Test - Complete Blood Count (CBC)",
+      "category": "diagnostic",
+      "rate": 250.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-DIAG-002",
+      "name": "X-Ray - Chest PA View",
+      "category": "diagnostic",
+      "rate": 350.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-DIAG-003",
+      "name": "ECG - Electrocardiogram",
+      "category": "diagnostic",
+      "rate": 180.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-DIAG-004",
+      "name": "Ultrasound - Abdomen",
+      "category": "diagnostic",
+      "rate": 1000.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-DIAG-005",
+      "name": "CT Scan - Head",
+      "category": "diagnostic",
+      "rate": 4000.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-DIAG-006",
+      "name": "MRI - Brain",
+      "category": "diagnostic",
+      "rate": 12000.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-LAB-001",
+      "name": "Blood Sugar - Fasting",
+      "category": "diagnostic",
+      "rate": 80.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-LAB-002",
+      "name": "Lipid Profile",
+      "category": "diagnostic",
+      "rate": 450.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-LAB-003",
+      "name": "Liver Function Test (LFT)",
+      "category": "diagnostic",
+      "rate": 600.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-PROC-001",
+      "name": "Minor Surgery - Suturing",
+      "category": "procedure",
+      "rate": 1800.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-PROC-002",
+      "name": "Endoscopy - Upper GI",
+      "category": "procedure",
+      "rate": 3500.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-ROOM-001",
+      "name": "Room Charges - General Ward (per day)",
+      "category": "accommodation",
+      "rate": 800.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-ROOM-002",
+      "name": "Room Charges - Semi-Private Room (per day)",
+      "category": "accommodation",
+      "rate": 1500.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-ROOM-003",
+      "name": "Room Charges - ICU (per day)",
+      "category": "accommodation",
+      "rate": 3500.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-NURS-001",
+      "name": "Nursing Charges (per day)",
+      "category": "nursing",
+      "rate": 400.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-EMER-001",
+      "name": "Emergency Consultation",
+      "category": "consultation",
+      "rate": 900.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "DL-PHYS-001",
+      "name": "Physiotherapy Session",
+      "category": "therapy",
+      "rate": 300.0,
+      "source": "Delhi State Health Scheme",
+      "state_code": "DL",
+      "effective_date": "2023-01-01T00:00:00Z"
+    }
+  ]
+} 

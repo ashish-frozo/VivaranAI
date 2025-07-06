@@ -1,0 +1,42 @@
+APOLLO HOSPITALS
+Delhi Branch
+Medical Bill Summary
+
+Patient: John Doe
+Date: 2024-01-15
+Bill No: APL/2024/001234
+
+CONSULTATION CHARGES:
+- Doctor Consultation (General Medicine): ₹2,500
+- Doctor Consultation (Cardiology): ₹3,000  
+- Doctor Consultation (General Medicine): ₹2,500
+- Emergency Consultation: ₹1,500
+
+DIAGNOSTIC TESTS:
+- Complete Blood Count (CBC): ₹800
+- Complete Blood Count (CBC): ₹800
+- Complete Blood Count (CBC): ₹800
+- Complete Blood Count (CBC): ₹800
+- Chest X-Ray: ₹1,200
+- ECG: ₹600
+- Lipid Profile: ₹1,500
+- Liver Function Test: ₹1,200
+
+ROOM CHARGES:
+- General Ward (2 days): ₹4,000
+- AC Charges: ₹1,000
+
+PHARMACY:
+- Paracetamol 500mg (10 tablets): ₹150
+- Aspirin 75mg (30 tablets): ₹200
+- Metformin 500mg (30 tablets): ₹300
+
+MISCELLANEOUS:
+- Registration Fee: ₹500
+- Medical Records Fee: ₹200
+- Nursing Charges: ₹2,000
+
+TOTAL BILL AMOUNT: ₹23,550
+
+Payment Mode: Cash
+Discharge Date: 2024-01-17 

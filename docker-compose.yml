@@ -1,0 +1,241 @@
+version: '3.8'
+
+name: medbillguardagent-dev
+
+services:
+  # Main MedBillGuardAgent Service
+  medbillguardagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8000:8000"
+    environment:
+      - VIVARAN_ENV=development
+      - VIVARAN_LOG_LEVEL=DEBUG
+      - VIVARAN_REDIS_URL=redis://redis:6379/0
+      - VIVARAN_NATS_URL=nats://nats:4222
+      - VIVARAN_VECTOR_DB_PATH=/data/lancedb
+      - VIVARAN_S3_ENDPOINT=http://minio:9000
+      - VIVARAN_S3_ACCESS_KEY=minioadmin
+      - VIVARAN_S3_SECRET_KEY=minioadmin
+      - VIVARAN_FEATURE_FLAGS_ENABLED=true
+      - USE_LOCAL_LLM=0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy-key-for-dev}
+    volumes:
+      - ./data:/data
+      - ./fixtures:/app/fixtures:ro
+      - ./prompts:/app/prompts:ro
+      - ./templates:/app/templates:ro
+    depends_on:
+      - redis
+      - nats
+      - minio
+      - lancedb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - medbillguard-net
+
+  # Redis for Caching & Rate Limiting
+  redis:
+    image: redis:7-alpine
+    container_name: medbill-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # NATS for Event Streaming
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"      # NATS client port
+      - "8222:8222"      # HTTP management port
+      - "6222:6222"      # Cluster routing port
+    command: [
+      "--jetstream",
+      "--store_dir=/data",
+      "--max_memory_store=1GB", 
+      "--max_file_store=2GB",
+      "--http_port=8222"
+    ]
+    volumes:
+      - nats_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medbillguard-net
+
+  # MinIO (S3-compatible) for Document Storage
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    ports:
+      - "9000:9000"      # API port
+      - "9001:9001"      # Console port
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - medbillguard-net
+
+  # LanceDB for Vector Search & RAG
+  lancedb:
+    image: lancedb/lancedb:v0.3.4
+    ports:
+      - "8001:8001"
+    environment:
+      - LANCE_DB_URI=/lancedb
+      - LANCE_DB_HOST=0.0.0.0
+      - LANCE_DB_PORT=8001
+    volumes:
+      - lancedb_data:/lancedb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - medbillguard-net
+
+  # Mock Unleash Feature Flags Server
+  unleash-mock:
+    image: unleashorg/unleash-server:5.7
+    ports:
+      - "4242:4242"
+    environment:
+      - DATABASE_URL=postgres://postgres:unleash_password@unleash-db:5432/unleash
+      - DATABASE_SSL=false
+      - LOG_LEVEL=warn
+      - INIT_FRONTEND_API_TOKENS=*:development.unleash-insecure-frontend-api-token
+      - INIT_CLIENT_API_TOKENS=*:development.unleash-insecure-api-token
+    depends_on:
+      - unleash-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4242/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - medbillguard-net
+
+  # PostgreSQL for Unleash Feature Flags
+  unleash-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=unleash
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=unleash_password
+    volumes:
+      - unleash_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medbillguard-net
+
+  # Prometheus for Monitoring (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: medbill-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+
+  # Grafana for Visualization (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: medbill-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+# Named volumes for data persistence
+volumes:
+  redis_data:
+    driver: local
+  nats_data:
+    driver: local
+  minio_data:
+    driver: local
+  lancedb_data:
+    driver: local
+  unleash_db_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Custom network for service communication
+networks:
+  medbillguard-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Deployment resources
+deploy:
+  resources:
+    limits:
+      cpus: '0.5'
+      memory: 1G
+    reservations:
+      cpus: '0.2'
+      memory: 512M 

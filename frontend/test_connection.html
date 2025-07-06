@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBillGuard - Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 MedBillGuard Connection Test</h1>
+    
+    <div class="test-section">
+        <h2>Server Status</h2>
+        <div id="server-status" class="status info">Testing server connection...</div>
+        <button onclick="testServerConnection()">Test Server Connection</button>
+        <pre id="server-response"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>CORS Test</h2>
+        <div id="cors-status" class="status info">Testing CORS...</div>
+        <button onclick="testCORS()">Test CORS</button>
+        <pre id="cors-response"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>API Analysis Test</h2>
+        <div id="api-status" class="status info">Ready to test analysis...</div>
+        <button onclick="testAnalysis()">Test Analysis API</button>
+        <pre id="api-response"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Network Information</h2>
+        <div id="network-info">
+            <p><strong>Current URL:</strong> <span id="current-url"></span></p>
+            <p><strong>API URL:</strong> <span id="api-url"></span></p>
+            <p><strong>Browser:</strong> <span id="browser-info"></span></p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8001';
+        
+        // Display network info
+        document.getElementById('current-url').textContent = window.location.href;
+        document.getElementById('api-url').textContent = API_BASE;
+        document.getElementById('browser-info').textContent = navigator.userAgent;
+
+        async function testServerConnection() {
+            const statusEl = document.getElementById('server-status');
+            const responseEl = document.getElementById('server-response');
+            
+            statusEl.textContent = 'Testing server connection...';
+            statusEl.className = 'status info';
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.textContent = '✅ Server is running and healthy!';
+                    statusEl.className = 'status success';
+                    responseEl.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Server connection failed: ${error.message}`;
+                statusEl.className = 'status error';
+                responseEl.textContent = `Error: ${error.toString()}`;
+            }
+        }
+
+        async function testCORS() {
+            const statusEl = document.getElementById('cors-status');
+            const responseEl = document.getElementById('cors-response');
+            
+            statusEl.textContent = 'Testing CORS...';
+            statusEl.className = 'status info';
+            
+            try {
+                const response = await fetch(`${API_BASE}/`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Origin': window.location.origin
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.textContent = '✅ CORS is working correctly!';
+                    statusEl.className = 'status success';
+                    responseEl.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                statusEl.textContent = `❌ CORS test failed: ${error.message}`;
+                statusEl.className = 'status error';
+                responseEl.textContent = `Error: ${error.toString()}`;
+                
+                // Additional CORS debugging
+                console.error('CORS Error Details:', error);
+                responseEl.textContent += '\n\nThis might be a CORS issue. Check browser console for more details.';
+            }
+        }
+
+        async function testAnalysis() {
+            const statusEl = document.getElementById('api-status');
+            const responseEl = document.getElementById('api-response');
+            
+            statusEl.textContent = 'Testing analysis API...';
+            statusEl.className = 'status info';
+            
+            try {
+                // Simple test bill content (avoiding Unicode characters)
+                const testBill = `
+APOLLO HOSPITALS
+Patient: Test Patient
+Date: 2023-11-15
+
+CHARGES:
+1. Consultation: Rs 500.00
+2. Blood Test: Rs 300.00
+
+TOTAL: Rs 800.00
+                `.trim();
+                
+                // Properly encode UTF-8 to base64
+                const base64Content = btoa(unescape(encodeURIComponent(testBill)));
+                
+                console.log('Test Bill Content:', testBill);
+                console.log('Base64 Length:', base64Content.length);
+                console.log('Base64 Sample:', base64Content.substring(0, 50) + '...');
+                
+                const payload = {
+                    file_content: base64Content,
+                    filename: 'test_bill.txt',
+                    language: 'english',
+                    insurance_type: 'cghs'
+                };
+                
+                const response = await fetch(`${API_BASE}/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.textContent = '✅ Analysis API is working!';
+                    statusEl.className = 'status success';
+                    responseEl.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                statusEl.textContent = `❌ Analysis API failed: ${error.message}`;
+                statusEl.className = 'status error';
+                responseEl.textContent = `Error: ${error.toString()}`;
+            }
+        }
+
+        // Auto-run basic tests on page load
+        window.addEventListener('load', function() {
+            setTimeout(testServerConnection, 1000);
+        });
+    </script>
+</body>
+</html> 

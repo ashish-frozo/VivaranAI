@@ -1,0 +1,128 @@
+# MedBillGuardAgent - Test Configuration
+# This file contains settings optimized for testing environment
+
+# Application Settings
+app:
+  environment: "test"
+  debug: true
+
+# Server Configuration
+server:
+  workers: 1
+  timeout: 30  # Shorter timeout for tests
+
+# Logging Configuration
+logging:
+  level: "DEBUG"
+  format: "text"  # Simple format for test readability
+  file_enabled: false
+  console_enabled: true
+
+# Performance & Rate Limiting (Relaxed for testing)
+performance:
+  rate_limit_per_minute: 1000
+  rate_limit_burst: 100
+  cache_enabled: false  # Disable cache for predictable tests
+  concurrent_requests: 5
+
+# Database Configuration (Test databases)
+databases:
+  redis:
+    url: "redis://localhost:6379/1"  # Test database
+    max_connections: 5
+    
+  vector_db:
+    path: "/tmp/test_lancedb"
+    max_vectors: 10000  # Small for tests
+    
+  audit_db:
+    enabled: false  # Disable for faster tests
+
+# LLM Configuration (Mock for testing)
+llm:
+  provider: "mock"  # Use mock provider for tests
+  timeout: 10
+  retry_attempts: 1
+  
+# OCR Configuration (Fast settings for tests)
+ocr:
+  confidence_threshold: 50  # Lower for test data
+  preprocess:
+    denoise: false
+    enhance_contrast: false
+    resize_factor: 1.0
+
+# Document Processing (Test limits)
+document:
+  max_pages: 5
+  max_file_size: 1048576  # 1MB for tests
+  temp_dir: "/tmp/test_medbillguard"
+  validation:
+    min_confidence: 0.3  # Relaxed for test data
+    max_processing_time: 30
+
+# Storage Configuration (Local for tests)
+storage:
+  type: "local"
+  local:
+    path: "/tmp/test_documents"
+    cleanup_days: 1
+
+# Rate Validation (Mock APIs)
+rate_validation:
+  cghs:
+    api_key: "test-cghs-key"
+    cache_ttl: 60  # 1 minute for tests
+  esi:
+    api_key: "test-esi-key"
+    cache_ttl: 60
+  nppa:
+    api_key: "test-nppa-key"
+    cache_ttl: 60
+
+# Feature Flags (All enabled for testing)
+features:
+  flags:
+    duplicate_detection: true
+    bulk_processing: true
+    refund_letter_generation: true
+    multi_language_support: true
+    confidence_scoring: true
+    audit_logging: false
+
+# Monitoring & Observability (Minimal for tests)
+monitoring:
+  prometheus:
+    enabled: false
+  opentelemetry:
+    enabled: false
+  health_checks:
+    enabled: true
+    include_dependencies: false
+  sentry:
+    enabled: false
+
+# Event Streaming (Test NATS)
+events:
+  nats:
+    url: "nats://localhost:4222"
+    streams:
+      medbill_events:
+        max_age: 3600  # 1 hour retention for tests
+
+# Security Configuration (Relaxed for testing)
+security:
+  jwt:
+    expire_minutes: 10  # Short expiry for tests
+  api_keys:
+    enabled: false
+  cors:
+    allow_origins: ["*"]
+
+# Development Settings (Test overrides)
+development:
+  auto_reload: false
+  debug_mode: true
+  mock_external_apis: true
+  sample_data_enabled: true
+  profiling_enabled: false 

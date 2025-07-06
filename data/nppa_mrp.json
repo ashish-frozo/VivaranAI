@@ -1,0 +1,84 @@
+{
+  "drugs": [
+    {
+      "drug_name": "Paracetamol",
+      "brand_name": "Crocin",
+      "strength": "500mg",
+      "dosage_form": "Tablet",
+      "pack_size": "10 tablets",
+      "mrp": 25.0,
+      "manufacturer": "GSK",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Amoxicillin",
+      "brand_name": "Amoxil",
+      "strength": "250mg",
+      "dosage_form": "Capsule",
+      "pack_size": "10 capsules",
+      "mrp": 45.0,
+      "manufacturer": "Cipla",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Omeprazole",
+      "brand_name": "Omez",
+      "strength": "20mg",
+      "dosage_form": "Capsule",
+      "pack_size": "10 capsules",
+      "mrp": 35.0,
+      "manufacturer": "Dr. Reddy's",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Metformin",
+      "brand_name": "Glycomet",
+      "strength": "500mg",
+      "dosage_form": "Tablet",
+      "pack_size": "10 tablets",
+      "mrp": 15.0,
+      "manufacturer": "USV",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Amlodipine",
+      "brand_name": "Amlong",
+      "strength": "5mg",
+      "dosage_form": "Tablet",
+      "pack_size": "10 tablets",
+      "mrp": 20.0,
+      "manufacturer": "Micro Labs",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Cetirizine",
+      "brand_name": "Zyrtec",
+      "strength": "10mg",
+      "dosage_form": "Tablet",
+      "pack_size": "10 tablets",
+      "mrp": 30.0,
+      "manufacturer": "UCB",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Azithromycin",
+      "brand_name": "Azee",
+      "strength": "500mg",
+      "dosage_form": "Tablet",
+      "pack_size": "3 tablets",
+      "mrp": 75.0,
+      "manufacturer": "Cipla",
+      "updated_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "drug_name": "Diclofenac",
+      "brand_name": "Voveran",
+      "strength": "50mg",
+      "dosage_form": "Tablet",
+      "pack_size": "10 tablets",
+      "mrp": 25.0,
+      "manufacturer": "Novartis",
+      "updated_date": "2023-01-01T00:00:00Z"
+    }
+  ]
+} 

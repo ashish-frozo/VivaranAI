@@ -1,0 +1,53 @@
+drug_name,brand_name,strength,dosage_form,pack_size,mrp,manufacturer,updated_date,category,schedule
+Paracetamol,Crocin,500mg,Tablet,10 tablets,25.0,GSK,2023-01-01T00:00:00Z,Analgesic,OTC
+Paracetamol,Dolo,650mg,Tablet,15 tablets,35.0,Micro Labs,2023-01-01T00:00:00Z,Analgesic,OTC
+Amoxicillin,Amoxil,250mg,Capsule,10 capsules,45.0,Cipla,2023-01-01T00:00:00Z,Antibiotic,H
+Amoxicillin,Moxikind,500mg,Capsule,10 capsules,85.0,Mankind,2023-01-01T00:00:00Z,Antibiotic,H
+Omeprazole,Omez,20mg,Capsule,10 capsules,35.0,Dr. Reddy's,2023-01-01T00:00:00Z,Antacid,H
+Omeprazole,Prilosec,40mg,Capsule,10 capsules,65.0,Cipla,2023-01-01T00:00:00Z,Antacid,H
+Metformin,Glycomet,500mg,Tablet,10 tablets,15.0,USV,2023-01-01T00:00:00Z,Antidiabetic,H
+Metformin,Glucophage,850mg,Tablet,10 tablets,25.0,Merck,2023-01-01T00:00:00Z,Antidiabetic,H
+Amlodipine,Amlong,5mg,Tablet,10 tablets,20.0,Micro Labs,2023-01-01T00:00:00Z,Antihypertensive,H
+Amlodipine,Norvasc,10mg,Tablet,10 tablets,35.0,Pfizer,2023-01-01T00:00:00Z,Antihypertensive,H
+Cetirizine,Zyrtec,10mg,Tablet,10 tablets,30.0,UCB,2023-01-01T00:00:00Z,Antihistamine,OTC
+Cetirizine,Cetcip,5mg,Syrup,60ml,25.0,Cipla,2023-01-01T00:00:00Z,Antihistamine,OTC
+Azithromycin,Azee,500mg,Tablet,3 tablets,75.0,Cipla,2023-01-01T00:00:00Z,Antibiotic,H
+Azithromycin,Zithromax,250mg,Tablet,6 tablets,120.0,Pfizer,2023-01-01T00:00:00Z,Antibiotic,H
+Diclofenac,Voveran,50mg,Tablet,10 tablets,25.0,Novartis,2023-01-01T00:00:00Z,NSAID,H
+Diclofenac,Dynapar,75mg,Injection,3ml,45.0,Troikaa,2023-01-01T00:00:00Z,NSAID,H
+Atorvastatin,Lipitor,10mg,Tablet,10 tablets,85.0,Pfizer,2023-01-01T00:00:00Z,Statin,H
+Atorvastatin,Atorlip,20mg,Tablet,10 tablets,125.0,Cipla,2023-01-01T00:00:00Z,Statin,H
+Losartan,Cozaar,50mg,Tablet,10 tablets,95.0,MSD,2023-01-01T00:00:00Z,ARB,H
+Losartan,Losar,25mg,Tablet,10 tablets,65.0,Cipla,2023-01-01T00:00:00Z,ARB,H
+Pantoprazole,Pantop,40mg,Tablet,10 tablets,45.0,Aristo,2023-01-01T00:00:00Z,PPI,H
+Pantoprazole,Protonix,20mg,Tablet,10 tablets,35.0,Pfizer,2023-01-01T00:00:00Z,PPI,H
+Clopidogrel,Plavix,75mg,Tablet,10 tablets,185.0,Sanofi,2023-01-01T00:00:00Z,Antiplatelet,H
+Clopidogrel,Clopivas,75mg,Tablet,10 tablets,95.0,Cipla,2023-01-01T00:00:00Z,Antiplatelet,H
+Aspirin,Disprin,325mg,Tablet,10 tablets,8.0,Reckitt,2023-01-01T00:00:00Z,Analgesic,OTC
+Aspirin,Ecosprin,75mg,Tablet,14 tablets,12.0,USV,2023-01-01T00:00:00Z,Cardioprotective,OTC
+Montelukast,Singulair,10mg,Tablet,10 tablets,165.0,MSD,2023-01-01T00:00:00Z,Antiasthmatic,H
+Montelukast,Montair,5mg,Tablet,10 tablets,85.0,Cipla,2023-01-01T00:00:00Z,Antiasthmatic,H
+Levothyroxine,Eltroxin,50mcg,Tablet,100 tablets,45.0,GSK,2023-01-01T00:00:00Z,Thyroid,H
+Levothyroxine,Thyronorm,25mcg,Tablet,120 tablets,35.0,Abbott,2023-01-01T00:00:00Z,Thyroid,H
+Furosemide,Lasix,40mg,Tablet,10 tablets,15.0,Sanofi,2023-01-01T00:00:00Z,Diuretic,H
+Furosemide,Frusenex,20mg,Tablet,10 tablets,12.0,Ranbaxy,2023-01-01T00:00:00Z,Diuretic,H
+Insulin Glargine,Lantus,100IU/ml,Injection,3ml,425.0,Sanofi,2023-01-01T00:00:00Z,Insulin,H
+Insulin Human,Humulin,100IU/ml,Injection,10ml,285.0,Lilly,2023-01-01T00:00:00Z,Insulin,H
+Salbutamol,Ventolin,100mcg,Inhaler,200 doses,165.0,GSK,2023-01-01T00:00:00Z,Bronchodilator,H
+Salbutamol,Asthalin,2mg,Tablet,10 tablets,15.0,Cipla,2023-01-01T00:00:00Z,Bronchodilator,H
+Ranitidine,Aciloc,150mg,Tablet,10 tablets,25.0,Cadila,2023-01-01T00:00:00Z,H2 Blocker,H
+Ranitidine,Rantac,300mg,Tablet,10 tablets,35.0,JB Chemicals,2023-01-01T00:00:00Z,H2 Blocker,H
+Ciprofloxacin,Cifran,500mg,Tablet,10 tablets,45.0,Ranbaxy,2023-01-01T00:00:00Z,Antibiotic,H
+Ciprofloxacin,Ciplox,250mg,Tablet,10 tablets,28.0,Cipla,2023-01-01T00:00:00Z,Antibiotic,H
+Doxycycline,Doxy,100mg,Capsule,10 capsules,35.0,Pfizer,2023-01-01T00:00:00Z,Antibiotic,H
+Doxycycline,Doxt,50mg,Capsule,10 capsules,25.0,Cipla,2023-01-01T00:00:00Z,Antibiotic,H
+Prednisolone,Wysolone,5mg,Tablet,10 tablets,15.0,Wyeth,2023-01-01T00:00:00Z,Steroid,H
+Prednisolone,Omnacortil,10mg,Tablet,10 tablets,25.0,Macleods,2023-01-01T00:00:00Z,Steroid,H
+Tramadol,Ultracet,37.5mg+325mg,Tablet,10 tablets,65.0,Janssen,2023-01-01T00:00:00Z,Analgesic,H
+Tramadol,Tramazac,50mg,Capsule,10 capsules,45.0,Zydus,2023-01-01T00:00:00Z,Analgesic,H
+Gabapentin,Gabapin,300mg,Capsule,10 capsules,85.0,Intas,2023-01-01T00:00:00Z,Anticonvulsant,H
+Gabapentin,Neurontin,100mg,Capsule,10 capsules,45.0,Pfizer,2023-01-01T00:00:00Z,Anticonvulsant,H
+Clarithromycin,Klacid,500mg,Tablet,10 tablets,185.0,Abbott,2023-01-01T00:00:00Z,Antibiotic,H
+Clarithromycin,Clarbact,250mg,Tablet,10 tablets,95.0,Cipla,2023-01-01T00:00:00Z,Antibiotic,H
+Domperidone,Domstal,10mg,Tablet,10 tablets,25.0,Torrent,2023-01-01T00:00:00Z,Antiemetic,H
+Domperidone,Motilium,30mg,Suspension,100ml,45.0,Janssen,2023-01-01T00:00:00Z,Antiemetic,H 

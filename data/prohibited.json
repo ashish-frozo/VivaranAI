@@ -1,0 +1,64 @@
+{
+  "prohibited_items": [
+    {
+      "name": "Cosmetic Surgery",
+      "category": "surgery",
+      "reason": "Not covered under insurance - elective procedure",
+      "source": "CGHS Guidelines"
+    },
+    {
+      "name": "Hair Transplant",
+      "category": "cosmetic",
+      "reason": "Elective cosmetic procedure",
+      "source": "ESI Rules"
+    },
+    {
+      "name": "Dental Implants",
+      "category": "dental",
+      "reason": "Not covered under basic health insurance",
+      "source": "CGHS Guidelines"
+    },
+    {
+      "name": "Lasik Eye Surgery",
+      "category": "surgery",
+      "reason": "Elective vision correction procedure",
+      "source": "Insurance Guidelines"
+    },
+    {
+      "name": "Liposuction",
+      "category": "cosmetic",
+      "reason": "Cosmetic procedure not medically necessary",
+      "source": "CGHS Guidelines"
+    },
+    {
+      "name": "Breast Augmentation",
+      "category": "cosmetic",
+      "reason": "Cosmetic surgery unless medically indicated",
+      "source": "Insurance Guidelines"
+    },
+    {
+      "name": "Rhinoplasty",
+      "category": "cosmetic",
+      "reason": "Cosmetic nose surgery unless medically necessary",
+      "source": "ESI Rules"
+    },
+    {
+      "name": "Botox Treatment",
+      "category": "cosmetic",
+      "reason": "Cosmetic treatment not covered",
+      "source": "CGHS Guidelines"
+    },
+    {
+      "name": "Weight Loss Surgery",
+      "category": "surgery",
+      "reason": "Bariatric surgery requires pre-authorization",
+      "source": "Insurance Guidelines"
+    },
+    {
+      "name": "Fertility Treatment",
+      "category": "treatment",
+      "reason": "IVF and fertility treatments not covered",
+      "source": "CGHS Guidelines"
+    }
+  ]
+} 

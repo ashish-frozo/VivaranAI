@@ -1,0 +1,257 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguard-service
+  namespace: medbillguard
+  labels:
+    app: medbillguard-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: medbillguard-api
+
+---
+# LoadBalancer Service for external access (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguardagent-external
+  namespace: medbillguardagent
+  labels:
+    app.kubernetes.io/name: medbillguardagent
+    app.kubernetes.io/component: external-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: medbillguardagent
+    app.kubernetes.io/component: api
+  sessionAffinity: None
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: medbillguard
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: redis
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguard-agent
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-agent
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: medbillguard-agent-system
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8001"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8001
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 8002
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: medbillguard-agent
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguard-agent-external
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-agent
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: medbillguard-agent
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguard-redis
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: medbillguard-redis
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguard-postgres
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: medbillguard-postgres
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: prometheus
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: grafana
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: tracing
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: ClusterIP
+  ports:
+  - name: jaeger-ui
+    port: 16686
+    targetPort: 16686
+    protocol: TCP
+  - name: jaeger-collector-http
+    port: 14268
+    targetPort: 14268
+    protocol: TCP
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: jaeger
+
+---
+# Headless service for StatefulSet deployments (if using StatefulSets)
+apiVersion: v1
+kind: Service
+metadata:
+  name: medbillguard-agent-headless
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-agent
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: http
+    port: 8001
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 8002
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: medbillguard-agent 

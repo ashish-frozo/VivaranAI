@@ -1,0 +1,240 @@
+# Prometheus Alerting Rules for MedBillGuard Agent System
+# Comprehensive monitoring and alerting for production deployment
+
+groups:
+  - name: medbillguard-critical-alerts
+    interval: 30s
+    rules:
+      - alert: AgentDown
+        expr: up{job="medbillguard-agents"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: agent
+          team: platform
+        annotations:
+          summary: "MedBillGuard agent is down"
+          description: "MedBillGuard agent {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://docs.medbillguard.com/runbooks/agent-down"
+          
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: cache
+          team: platform
+        annotations:
+          summary: "Redis is down"
+          description: "Redis server {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://docs.medbillguard.com/runbooks/redis-down"
+          
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          team: platform
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL server {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://docs.medbillguard.com/runbooks/postgres-down"
+
+  - name: medbillguard-performance-alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(medbillguard_requests_total{status=~"5.."}[5m]) / rate(medbillguard_requests_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: agent
+          team: platform
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for instance {{ $labels.instance }}."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-error-rate"
+          
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(medbillguard_request_duration_seconds_bucket[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: agent
+          team: platform
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s for instance {{ $labels.instance }}."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-response-time"
+          
+      - alert: SlowAnalysis
+        expr: histogram_quantile(0.90, rate(medbillguard_analysis_duration_seconds_bucket[5m])) > 30
+        for: 3m
+        labels:
+          severity: warning
+          component: agent
+          team: platform
+        annotations:
+          summary: "Slow medical bill analysis detected"
+          description: "90th percentile analysis time is {{ $value }}s for agent {{ $labels.agent_id }}."
+          runbook_url: "https://docs.medbillguard.com/runbooks/slow-analysis"
+
+  - name: medbillguard-resource-alerts
+    interval: 1m
+    rules:
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{pod=~"medbillguard-agent-.*"}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+          team: platform
+        annotations:
+          summary: "High CPU usage"
+          description: "Pod {{ $labels.pod }} CPU usage is {{ $value }}%."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-cpu-usage"
+          
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes{pod=~"medbillguard-agent-.*"} / container_spec_memory_limit_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+          team: platform
+        annotations:
+          summary: "High memory usage"
+          description: "Pod {{ $labels.pod }} memory usage is {{ $value }}%."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-memory-usage"
+          
+      - alert: PodRestartLoop
+        expr: increase(kube_pod_container_status_restarts_total{pod=~"medbillguard-.*"}[1h]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          component: agent
+          team: platform
+        annotations:
+          summary: "Pod restart loop detected"
+          description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour."
+          runbook_url: "https://docs.medbillguard.com/runbooks/pod-restart-loop"
+
+  - name: medbillguard-storage-alerts
+    interval: 1m
+    rules:
+      - alert: DiskSpaceHigh
+        expr: (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_free_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: storage
+          team: platform
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is {{ $value }}% on node {{ $labels.instance }}."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-disk-usage"
+          
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+          team: platform
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory usage is {{ $value }}% on instance {{ $labels.instance }}."
+          runbook_url: "https://docs.medbillguard.com/runbooks/redis-memory-high"
+
+  - name: medbillguard-business-alerts
+    interval: 1m
+    rules:
+      - alert: LowAnalysisVolume
+        expr: rate(medbillguard_analysis_total[1h]) < 1
+        for: 30m
+        labels:
+          severity: warning
+          component: business
+          team: product
+        annotations:
+          summary: "Low analysis volume"
+          description: "Analysis rate has been below 1 per hour for 30 minutes."
+          runbook_url: "https://docs.medbillguard.com/runbooks/low-analysis-volume"
+          
+      - alert: HighOverchargeDetection
+        expr: rate(medbillguard_analysis_total{verdict="critical"}[1h]) / rate(medbillguard_analysis_total[1h]) > 0.3
+        for: 15m
+        labels:
+          severity: info
+          component: business
+          team: product
+        annotations:
+          summary: "High overcharge detection rate"
+          description: "{{ $value | humanizePercentage }} of analyses are detecting critical overcharges."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-overcharge-rate"
+          
+      - alert: LowConfidenceScores
+        expr: avg(medbillguard_confidence_score) < 0.7
+        for: 10m
+        labels:
+          severity: warning
+          component: business
+          team: ml
+        annotations:
+          summary: "Low confidence scores"
+          description: "Average confidence score has been {{ $value }} for 10 minutes."
+          runbook_url: "https://docs.medbillguard.com/runbooks/low-confidence-scores"
+
+  - name: medbillguard-security-alerts
+    interval: 1m
+    rules:
+      - alert: HighFailedAuthAttempts
+        expr: rate(medbillguard_auth_failures_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          component: security
+          team: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "{{ $value }} authentication failures per second detected."
+          runbook_url: "https://docs.medbillguard.com/runbooks/auth-failures"
+          
+      - alert: SuspiciousAPIUsage
+        expr: rate(medbillguard_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: info
+          component: security
+          team: security
+        annotations:
+          summary: "High API usage detected"
+          description: "{{ $value }} requests per second from {{ $labels.instance }}."
+          runbook_url: "https://docs.medbillguard.com/runbooks/high-api-usage"
+
+  - name: medbillguard-availability-alerts
+    interval: 1m
+    rules:
+      - alert: ServiceUnavailable
+        expr: avg_over_time(up{job="medbillguard-agents"}[5m]) < 0.5
+        for: 2m
+        labels:
+          severity: critical
+          component: availability
+          team: platform
+        annotations:
+          summary: "Service availability below 50%"
+          description: "Less than 50% of agents are available."
+          runbook_url: "https://docs.medbillguard.com/runbooks/service-unavailable"
+          
+      - alert: HealthCheckFailing
+        expr: medbillguard_health_check_status != 1
+        for: 2m
+        labels:
+          severity: warning
+          component: health
+          team: platform
+        annotations:
+          summary: "Health check failing"
+          description: "Health check for {{ $labels.instance }} is failing."
+          runbook_url: "https://docs.medbillguard.com/runbooks/health-check-failing" 

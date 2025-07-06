@@ -1,0 +1,95 @@
+APOLLO HOSPITALS
+Delhi Branch
+Medical Bill Summary
+
+Patient: John Doe
+Date: 2023-11-15
+Doctor: Dr. Sharma (Cardiology)
+Patient ID: APH789456
+
+ITEMIZED CHARGES:
+=================
+
+1. Consultation - Cardiologist
+   Rate: ₹2,500.00
+   Qty: 1
+   Total: ₹2,500.00
+
+2. ECG Test
+   Rate: ₹1,800.00
+   Qty: 1
+   Total: ₹1,800.00
+
+3. Complete Blood Count (CBC)
+   Rate: ₹1,200.00
+   Qty: 1
+   Total: ₹1,200.00
+
+4. CBC Test (Repeat)
+   Rate: ₹1,200.00
+   Qty: 1
+   Total: ₹1,200.00
+
+5. Blood Test - Complete Profile
+   Rate: ₹1,100.00
+   Qty: 1
+   Total: ₹1,100.00
+
+6. Chest X-Ray
+   Rate: ₹1,500.00
+   Qty: 1
+   Total: ₹1,500.00
+
+7. Doctor Consultation
+   Rate: ₹2,200.00
+   Qty: 1
+   Total: ₹2,200.00
+
+8. Consultation Fee
+   Rate: ₹2,350.00
+   Qty: 1
+   Total: ₹2,350.00
+
+9. Lab Charges
+   Rate: ₹850.00
+   Qty: 1
+   Total: ₹850.00
+
+10. Service Charges
+    Rate: ₹1,500.00
+    Qty: 1
+    Total: ₹1,500.00
+
+11. Administrative Fee
+    Rate: ₹750.00
+    Qty: 1
+    Total: ₹750.00
+
+12. Processing Fee
+    Rate: ₹950.00
+    Qty: 1
+    Total: ₹950.00
+
+13. Complete Blood Count
+    Rate: ₹1,300.00
+    Qty: 1
+    Total: ₹1,300.00
+
+14. Blood Profile Test
+    Rate: ₹1,150.00
+    Qty: 1
+    Total: ₹1,150.00
+
+15. Convenience Fee
+    Rate: ₹800.00
+    Qty: 1
+    Total: ₹800.00
+
+SUBTOTAL: ₹22,150.00
+TAX (GST 18%): ₹3,987.00
+TOTAL AMOUNT: ₹26,137.00
+
+Payment Method: Credit Card
+Status: PAID
+
+Thank you for choosing Apollo Hospitals 

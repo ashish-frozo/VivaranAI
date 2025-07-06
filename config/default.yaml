@@ -1,0 +1,222 @@
+# MedBillGuardAgent - Default Configuration
+# This file contains all default configuration values for the service
+# Environment variables can override any setting using the VIVARAN_ prefix
+
+# Application Settings
+app:
+  name: "MedBillGuardAgent"
+  version: "1.0.0"
+  description: "AI micro-service to detect over-charges in Indian hospital bills"
+  environment: "development"
+  debug: true
+  
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  max_request_size: 15728640  # 15MB for document uploads
+  timeout: 150  # seconds
+  cors_enabled: true
+  cors_origins:
+    - "http://localhost:3000"  # React dashboard
+    - "http://127.0.0.1:3000"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "structured"  # json or text
+  file_enabled: false
+  file_path: "/var/log/medbillguardagent.log"
+  console_enabled: true
+  
+# Performance & Rate Limiting
+performance:
+  rate_limit_per_minute: 60
+  rate_limit_burst: 10
+  cache_enabled: true
+  cache_ttl: 3600  # 1 hour
+  concurrent_requests: 10
+  
+# Database Configuration
+databases:
+  redis:
+    url: "redis://localhost:6379/0"
+    password: null
+    max_connections: 10
+    timeout: 5
+  
+  vector_db:
+    type: "lancedb"
+    path: "/data/lancedb"
+    embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+    dimension: 384
+    max_vectors: 1000000
+    
+  audit_db:
+    enabled: false
+    type: "postgresql"
+    host: "localhost"
+    port: 5432
+    database: "medbillguard_audit"
+    username: "medbillguard_user"
+    password: null
+
+# LLM Configuration
+llm:
+  provider: "openai"
+  api_key: null  # Set via environment variable
+  model: "gpt-4-turbo"
+  max_tokens: 4096
+  temperature: 0.1
+  timeout: 30
+  retry_attempts: 3
+  
+  # Fallback models
+  fallback_models:
+    - "gpt-3.5-turbo"
+    - "claude-3-sonnet"
+  
+  # Local LLM options
+  local:
+    enabled: false
+    model_path: "/models/mistral-7b"
+    device: "auto"  # auto, cpu, cuda
+
+# OCR Configuration
+ocr:
+  engine: "tesseract"
+  languages: ["eng", "hin", "ben", "tam"]
+  dpi: 300
+  page_seg_mode: 3
+  confidence_threshold: 60
+  preprocess:
+    denoise: true
+    enhance_contrast: true
+    resize_factor: 1.5
+
+# Document Processing
+document:
+  supported_formats: ["pdf", "jpg", "jpeg", "png"]
+  max_pages: 20
+  max_file_size: 15728640  # 15MB
+  temp_dir: "/tmp/medbillguard"
+  
+  # Validation rules
+  validation:
+    require_text_content: true
+    min_confidence: 0.6
+    max_processing_time: 120  # seconds
+
+# Storage Configuration
+storage:
+  type: "s3"  # s3, local, gcs
+  s3:
+    endpoint: null  # Auto-detect AWS
+    bucket: "vivaranai-medbill-docs"
+    region: "ap-south-1"
+    access_key: null
+    secret_key: null
+    public_read: false
+    
+  local:
+    path: "/data/documents"
+    cleanup_days: 30
+
+# CGHS/ESI/NPPA Rate Validation
+rate_validation:
+  cghs:
+    tariff_version: "2023"
+    api_key: null
+    cache_ttl: 86400  # 24 hours
+    fallback_url: "https://cghs.gov.in/tariff/2023.json"
+    
+  esi:
+    tariff_version: "2023"
+    api_key: null
+    cache_ttl: 86400  # 24 hours
+    fallback_url: "https://esic.in/tariff/2023.json"
+    
+  nppa:
+    drug_db_version: "2024"
+    api_key: null
+    cache_ttl: 604800  # 7 days
+    api_url: "https://nppaindia.nic.in/api/drugs"
+
+# Feature Flags
+features:
+  enabled: true
+  flags:
+    duplicate_detection: true
+    bulk_processing: true
+    refund_letter_generation: true
+    multi_language_support: true
+    confidence_scoring: true
+    audit_logging: false
+
+# Monitoring & Observability  
+monitoring:
+  prometheus:
+    enabled: true
+    port: 8000
+    path: "/metrics"
+    
+  opentelemetry:
+    enabled: true
+    service_name: "medbillguardagent"
+    exporter: "jaeger"
+    endpoint: "http://localhost:14268/api/traces"
+    
+  health_checks:
+    enabled: true
+    path: "/healthz"
+    include_dependencies: true
+    
+  sentry:
+    enabled: false
+    dsn: null
+    environment: "development"
+
+# Event Streaming
+events:
+  nats:
+    url: "nats://localhost:4222"
+    subjects:
+      document_processed: "medbill.document.processed"
+      rate_violation_detected: "medbill.violation.detected"
+      audit_event: "medbill.audit"
+    
+    streams:
+      medbill_events:
+        subjects: ["medbill.>"]
+        retention: "workqueue"
+        max_age: 86400  # 24 hours
+
+# Security Configuration
+security:
+  jwt:
+    secret_key: null  # Set via environment variable
+    algorithm: "HS256"
+    expire_minutes: 60
+    
+  encryption:
+    key: null  # Set via environment variable
+    algorithm: "AES-256-GCM"
+    
+  api_keys:
+    enabled: false
+    header_name: "X-API-Key"
+    
+  cors:
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE"]
+    allow_headers: ["*"]
+    expose_headers: ["X-Request-ID"]
+
+# Development Settings (overridden in production)
+development:
+  auto_reload: true
+  debug_mode: true
+  mock_external_apis: true
+  sample_data_enabled: true
+  profiling_enabled: false 

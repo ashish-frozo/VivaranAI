@@ -1,0 +1,176 @@
+# Pre-commit hooks for MedBillGuardAgent
+# Run: pre-commit install to activate
+# Run: pre-commit run --all-files to test
+
+repos:
+  # Python code formatting and linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.6
+    hooks:
+      # Linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        name: ruff-lint
+        description: "Fast Python linter"
+        
+      # Formatter  
+      - id: ruff-format
+        name: ruff-format
+        description: "Fast Python formatter"
+
+  # Security scanning
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: [-r, ., -x, tests/, -f, json, -o, bandit-report.json]
+        name: bandit
+        description: "Security linter for Python"
+
+  # Dependency vulnerability scanning
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.2
+    hooks:
+      - id: safety
+        name: safety
+        description: "Check for security vulnerabilities"
+
+  # Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        args: [--strict, --show-error-codes]
+        additional_dependencies: [types-requests, types-redis, types-PyYAML]
+        name: mypy
+        description: "Static type checker"
+
+  # General code quality
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Python
+      - id: check-ast
+        name: check-ast
+        description: "Check Python AST"
+      - id: check-builtin-literals
+        name: check-builtin-literals
+        description: "Check builtin literals"
+      - id: debug-statements
+        name: debug-statements
+        description: "Check for debugger imports"
+      - id: name-tests-test
+        name: name-tests-test
+        description: "Check test files are named correctly"
+        args: [--pytest-test-first]
+        
+      # General file checks
+      - id: check-yaml
+        name: check-yaml
+        description: "Check YAML syntax"
+      - id: check-json
+        name: check-json
+        description: "Check JSON syntax"
+      - id: check-toml
+        name: check-toml
+        description: "Check TOML syntax"
+      - id: check-xml
+        name: check-xml
+        description: "Check XML syntax"
+        
+      # File formatting
+      - id: end-of-file-fixer
+        name: end-of-file-fixer
+        description: "Ensure files end with newline"
+      - id: trailing-whitespace
+        name: trailing-whitespace
+        description: "Remove trailing whitespace"
+      - id: mixed-line-ending
+        name: mixed-line-ending
+        description: "Check line endings"
+        
+      # Security
+      - id: check-private-key
+        name: check-private-key
+        description: "Check for private keys"
+      - id: detect-aws-credentials
+        name: detect-aws-credentials
+        description: "Detect AWS credentials"
+      - id: detect-private-key
+        name: detect-private-key
+        description: "Detect private keys"
+        
+      # Code organization
+      - id: check-merge-conflict
+        name: check-merge-conflict
+        description: "Check for merge conflicts"
+      - id: check-case-conflict
+        name: check-case-conflict
+        description: "Check for case conflicts"
+      - id: check-symlinks
+        name: check-symlinks
+        description: "Check for broken symlinks"
+
+  # Docker linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        name: hadolint
+        description: "Dockerfile linter"
+
+  # Shell script linting (if any)
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        description: "Shell script linter"
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        name: detect-secrets
+        description: "Detect secrets in code"
+
+  # Kubernetes YAML validation
+  - repo: https://github.com/instrumenta/kubeval
+    rev: v0.16.1
+    hooks:
+      - id: kubeval
+        files: k8s/.*\.yaml$
+        name: kubeval
+        description: "Validate Kubernetes YAML"
+
+  # Documentation
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+        additional_dependencies: [mdformat-gfm, mdformat-tables]
+        name: mdformat
+        description: "Format Markdown files"
+
+# Global settings
+default_language_version:
+  python: python3.11
+
+# Performance optimization
+default_stages: [commit, push]
+minimum_pre_commit_version: "3.0.0"
+
+# CI configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+    
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: [safety, bandit, detect-secrets]  # Skip heavy checks in CI
+  submodules: false 

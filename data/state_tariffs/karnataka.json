@@ -1,0 +1,187 @@
+{
+  "state_code": "KA",
+  "state_name": "Karnataka",
+  "effective_date": "2023-01-01T00:00:00Z",
+  "rates": [
+    {
+      "code": "KA-CONS-001",
+      "name": "Consultation - General Medicine",
+      "category": "consultation",
+      "rate": 500.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-CONS-002",
+      "name": "Consultation - Specialist",
+      "category": "consultation",
+      "rate": 850.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-CONS-003",
+      "name": "Consultation - Super Specialist",
+      "category": "consultation",
+      "rate": 1200.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-DIAG-001",
+      "name": "Blood Test - Complete Blood Count (CBC)",
+      "category": "diagnostic",
+      "rate": 200.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-DIAG-002",
+      "name": "X-Ray - Chest PA View",
+      "category": "diagnostic",
+      "rate": 280.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-DIAG-003",
+      "name": "ECG - Electrocardiogram",
+      "category": "diagnostic",
+      "rate": 140.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-DIAG-004",
+      "name": "Ultrasound - Abdomen",
+      "category": "diagnostic",
+      "rate": 800.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-DIAG-005",
+      "name": "CT Scan - Head",
+      "category": "diagnostic",
+      "rate": 3200.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-DIAG-006",
+      "name": "MRI - Brain",
+      "category": "diagnostic",
+      "rate": 9500.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-LAB-001",
+      "name": "Blood Sugar - Fasting",
+      "category": "diagnostic",
+      "rate": 60.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-LAB-002",
+      "name": "Lipid Profile",
+      "category": "diagnostic",
+      "rate": 350.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-LAB-003",
+      "name": "Liver Function Test (LFT)",
+      "category": "diagnostic",
+      "rate": 450.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-PROC-001",
+      "name": "Minor Surgery - Suturing",
+      "category": "procedure",
+      "rate": 1400.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-PROC-002",
+      "name": "Endoscopy - Upper GI",
+      "category": "procedure",
+      "rate": 2800.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-ROOM-001",
+      "name": "Room Charges - General Ward (per day)",
+      "category": "accommodation",
+      "rate": 500.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-ROOM-002",
+      "name": "Room Charges - Semi-Private Room (per day)",
+      "category": "accommodation",
+      "rate": 1000.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-ROOM-003",
+      "name": "Room Charges - ICU (per day)",
+      "category": "accommodation",
+      "rate": 2500.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-NURS-001",
+      "name": "Nursing Charges (per day)",
+      "category": "nursing",
+      "rate": 300.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-EMER-001",
+      "name": "Emergency Consultation",
+      "category": "consultation",
+      "rate": 700.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    },
+    {
+      "code": "KA-PHYS-001",
+      "name": "Physiotherapy Session",
+      "category": "therapy",
+      "rate": 250.0,
+      "source": "Karnataka State Health Scheme",
+      "state_code": "KA",
+      "effective_date": "2023-01-01T00:00:00Z"
+    }
+  ]
+} 

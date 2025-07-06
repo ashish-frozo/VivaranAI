@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medbillguardagent-config
+  namespace: medbillguardagent
+  labels:
+    app.kubernetes.io/name: medbillguardagent
+    app.kubernetes.io/component: config
+data:
+  # Application Configuration
+  VIVARAN_ENV: "production"
+  VIVARAN_LOG_LEVEL: "INFO"
+  VIVARAN_HOST: "0.0.0.0"
+  VIVARAN_PORT: "8000"
+  VIVARAN_WORKERS: "2"
+  
+  # Performance & Rate Limiting
+  VIVARAN_MAX_REQUEST_SIZE: "15728640"  # 15MB for document uploads
+  VIVARAN_RATE_LIMIT_PER_MINUTE: "60"
+  VIVARAN_TIMEOUT_SECONDS: "150"
+  
+  # OCR Configuration
+  TESSERACT_LANG: "eng+hin+ben+tam"
+  OCR_DPI: "300"
+  OCR_PAGE_SEG_MODE: "3"
+  
+  # LLM Configuration
+  LLM_PROVIDER: "openai"
+  LLM_MODEL: "gpt-4-turbo"
+  LLM_MAX_TOKENS: "4096"
+  LLM_TEMPERATURE: "0.1"
+  USE_LOCAL_LLM: "0"
+  
+  # Vector Database
+  VECTOR_DB_TYPE: "lancedb"
+  VECTOR_EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+  VECTOR_DB_PATH: "/data/lancedb"
+  
+  # Document Processing
+  SUPPORTED_FORMATS: "pdf,jpg,jpeg,png"
+  MAX_PAGES_PER_DOC: "20"
+  
+  # CGHS/ESI Rate Validation
+  CGHS_TARIFF_VERSION: "2023"
+  ESI_TARIFF_VERSION: "2023"
+  NPPA_DRUG_DB_VERSION: "2024"
+  
+  # Monitoring & Observability
+  PROMETHEUS_ENABLED: "true"
+  OTEL_ENABLED: "true"
+  OTEL_SERVICE_NAME: "medbillguardagent"
+  
+  # Feature Flags
+  FEATURE_FLAGS_ENABLED: "true"
+  FEATURE_DUPLICATE_DETECTION: "true"
+  FEATURE_BULK_PROCESSING: "true"
+  FEATURE_REFUND_LETTER_GEN: "true"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medbillguardagent-data-config
+  namespace: medbillguardagent
+  labels:
+    app.kubernetes.io/name: medbillguardagent
+    app.kubernetes.io/component: data-config
+data:
+  # Reference Data Sources
+  CGHS_TARIFF_URL: "https://cghs.gov.in/CghsGovIn/faces/ViewPage?_afrLoop=8234567&_afrWindowMode=0"
+  ESI_TARIFF_URL: "https://www.esic.in/medical-tariff"
+  NPPA_DRUG_URL: "https://www.nppaindia.nic.in/ceiling-price/"
+  
+  # Data Refresh Schedule (Cron format)
+  TARIFF_REFRESH_CRON: "0 2 * * 0"  # Weekly on Sunday 2 AM
+  DRUG_DB_REFRESH_CRON: "0 3 1 * *"  # Monthly on 1st day 3 AM
+  
+  # Cache TTL (seconds)
+  CGHS_CACHE_TTL: "86400"     # 24 hours
+  ESI_CACHE_TTL: "86400"      # 24 hours
+  NPPA_CACHE_TTL: "604800"    # 7 days 

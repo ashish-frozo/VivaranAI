@@ -1,0 +1,107 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Linting and type checking
+.mypy_cache/
+.ruff_cache/
+.bandit
+
+# Jupyter notebooks
+.ipynb_checkpoints
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Node modules (if any)
+node_modules/
+
+# Docker files (don't copy these into the image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD and deployment
+.github/
+k8s/
+monitoring/
+.pre-commit-config.yaml
+
+# Load testing
+loadtest/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local development data
+data/local/
+fixtures/local/ 

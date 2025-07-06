@@ -1,0 +1,444 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medbillguard-agent
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-agent
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: medbillguard-agent-system
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: medbillguard-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: medbillguard-agent
+        app.kubernetes.io/component: application
+        app.kubernetes.io/part-of: medbillguard-agent-system
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: medbillguard-serviceaccount
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: medbillguard-agent
+        image: medbillguard/agent:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8001
+          protocol: TCP
+        - name: metrics
+          containerPort: 8002
+          protocol: TCP
+        env:
+        # Configuration from ConfigMap
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: HOST
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: PORT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: LOG_LEVEL
+        - name: WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: WORKERS
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: REDIS_URL
+        - name: MAX_CONCURRENT_REQUESTS
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: MAX_CONCURRENT_REQUESTS
+        - name: ESTIMATED_COST_PER_REQUEST
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: ESTIMATED_COST_PER_REQUEST
+        - name: ESTIMATED_RESPONSE_TIME_MS
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: ESTIMATED_RESPONSE_TIME_MS
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: CORS_ORIGINS
+        - name: TESSDATA_PREFIX
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: TESSDATA_PREFIX
+        - name: PROMETHEUS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: PROMETHEUS_ENABLED
+        - name: TRACING_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: TRACING_ENABLED
+        - name: JAEGER_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: JAEGER_ENDPOINT
+        - name: ENABLE_RATE_LIMITING
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: ENABLE_RATE_LIMITING
+        - name: ENABLE_CACHING
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: ENABLE_CACHING
+        - name: CACHE_TTL_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: CACHE_TTL_SECONDS
+        - name: MAX_FILE_SIZE_MB
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: MAX_FILE_SIZE_MB
+        - name: MAX_PAGES_PER_DOCUMENT
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: MAX_PAGES_PER_DOCUMENT
+        - name: PROCESSING_TIMEOUT_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: medbillguard-config
+              key: PROCESSING_TIMEOUT_SECONDS
+        
+        # Secrets
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-secrets
+              key: OPENAI_API_KEY
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-secrets
+              key: DATABASE_PASSWORD
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-secrets
+              key: JWT_SECRET_KEY
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-secrets
+              key: ENCRYPTION_KEY
+        
+        # Pod-specific environment variables
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+            ephemeral-storage: "5Gi"
+        
+        livenessProbe:
+          httpGet:
+            path: /health/liveness
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        
+        startupProbe:
+          httpGet:
+            path: /health/liveness
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+          successThreshold: 1
+        
+        volumeMounts:
+        - name: app-logs
+          mountPath: /app/logs
+        - name: app-data
+          mountPath: /app/data
+        - name: tmp-storage
+          mountPath: /tmp
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+              - ALL
+      
+      volumes:
+      - name: app-logs
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: app-data
+        emptyDir:
+          sizeLimit: 5Gi
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - medbillguard-agent
+              topologyKey: kubernetes.io/hostname
+      
+      tolerations:
+      - effect: NoSchedule
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 300
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 300
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medbillguard-redis
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: medbillguard-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: medbillguard-redis
+        app.kubernetes.io/component: cache
+        app.kubernetes.io/part-of: medbillguard-agent-system
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-redis-secret
+              key: REDIS_PASSWORD
+              optional: true
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "1gb"
+        - --maxmemory-policy
+        - allkeys-lru
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: medbillguard-redis-pvc
+      - name: redis-config
+        emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medbillguard-postgres
+  namespace: medbillguard
+  labels:
+    app.kubernetes.io/name: medbillguard-postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: medbillguard-agent-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: medbillguard-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: medbillguard-postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: medbillguard-agent-system
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-postgres-secret
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medbillguard-postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: medbillguard-postgres-pvc
+      - name: postgres-init
+        configMap:
+          name: medbillguard-postgres-init 
