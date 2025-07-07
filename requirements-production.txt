@@ -128,7 +128,7 @@ zstandard==0.22.0
 xmltodict==0.13.0
 
 # Async Extensions
-anyio==4.1.0
+anyio==3.7.1
 trio==0.23.1
 
 # UUID & Hashing utilities (built-in modules, no external dependencies needed)
