@@ -1,8 +1,8 @@
 [build]
-builder = "nixpacks"
-buildCommand = "pip install -r requirements-production.txt"
+dockerfilePath = "Dockerfile.railway"
 
 [deploy]
+startCommand = "python railway_server.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
