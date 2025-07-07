@@ -400,22 +400,24 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
         
         # Route through the router agent for optimal agent selection
         routing_request = RoutingRequest(
-            task_type="medical_bill_analysis",
-            required_capabilities=[TaskCapability.DOCUMENT_PROCESSING],
-            task_data=request.dict(),
+            doc_id=request.doc_id,
             user_id=request.user_id,
-            priority="normal"
+            task_type="medical_bill_analysis",
+            required_capabilities=[TaskCapability.DOCUMENT_PROCESSING, TaskCapability.RATE_VALIDATION],
+            model_hint=ModelHint.STANDARD,
+            routing_strategy=RoutingStrategy.PERFORMANCE_OPTIMIZED,
+            max_agents=1,
+            timeout_seconds=60,
+            priority=5,  # High priority for medical analysis
+            metadata={"analysis_request": request.dict()}
         )
         
-        routing_decision = await app_state["router"].route_request(
-            routing_request,
-            strategy=RoutingStrategy.PERFORMANCE_OPTIMIZED
-        )
+        routing_decision = await app_state["router"].route_request(routing_request)
         
-        if not routing_decision.success:
+        if not routing_decision.selected_agents:
             raise HTTPException(
                 status_code=503,
-                detail=f"No suitable agent available: {routing_decision.reason}"
+                detail=f"No suitable agent available: {routing_decision.reasoning}"
             )
         
         # Execute analysis
@@ -435,13 +437,14 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
         processing_time = time.time() - start_time
         
         # Record metrics
+        selected_agent_id = routing_decision.selected_agents[0].agent_id if routing_decision.selected_agents else "unknown"
         analysis_count.labels(
             verdict=result.get("verdict", "unknown"),
-            agent_id=routing_decision.selected_agent_id
+            agent_id=selected_agent_id
         ).inc()
         
         analysis_duration.labels(
-            agent_id=routing_decision.selected_agent_id
+            agent_id=selected_agent_id
         ).observe(processing_time)
         
         logger.info(
@@ -449,7 +452,7 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             doc_id=request.doc_id,
             verdict=result.get("verdict"),
             processing_time=processing_time,
-            selected_agent=routing_decision.selected_agent_id
+            selected_agent=selected_agent_id
         )
         
         return AnalysisResponse(
