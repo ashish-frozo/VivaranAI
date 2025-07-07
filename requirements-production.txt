@@ -22,6 +22,7 @@ cryptography>=41.0.0,<46.0.0
 # Caching & Performance
 redis==5.0.1
 aioredis==2.0.1
+aiocache==0.12.2
 
 # HTTP Client & API
 httpx==0.25.2
@@ -139,6 +140,7 @@ xmltodict==0.13.0
 # Async Extensions
 anyio==3.7.1
 trio==0.23.1
+aiofiles==23.2.0
 
 # UUID & Hashing utilities (built-in modules, no external dependencies needed)
 
