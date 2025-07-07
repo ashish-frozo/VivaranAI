@@ -62,14 +62,14 @@ pytest-cov==4.1.0
 httpx==0.25.2  # For testing
 
 # Code Quality
-black==23.11.0
+black==22.12.0
 isort==5.12.0
 flake8==6.1.0
 mypy==1.7.1
 
 # Security & Compliance
 bandit==1.7.5
-safety==2.3.5
+# safety removed due to packaging dependency conflict
 semgrep==1.45.0
 
 # Performance Monitoring
