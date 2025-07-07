@@ -149,7 +149,8 @@ async def lifespan(app: FastAPI):
         
         # Initialize agent registry
         app_state["registry"] = AgentRegistry(redis_url=redis_url)
-        logger.info("Agent registry initialized")
+        await app_state["registry"].start()
+        logger.info("Agent registry initialized and started")
         
         # Initialize router agent
         app_state["router"] = RouterAgent(
@@ -223,6 +224,11 @@ async def lifespan(app: FastAPI):
         if app_state["registry"] and app_state["medical_agent"]:
             await app_state["registry"].deregister_agent(app_state["medical_agent"].agent_id)
             logger.info("Agent deregistered")
+        
+        # Stop registry
+        if app_state["registry"]:
+            await app_state["registry"].stop()
+            logger.info("Agent registry stopped")
         
         # Close connections
         if app_state["redis_manager"]:
