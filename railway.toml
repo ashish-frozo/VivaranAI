@@ -1,0 +1,32 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pip install -r requirements-production.txt"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[environments.production]
+[environments.production.variables]
+ENVIRONMENT = "production"
+DEBUG = "false"
+LOG_LEVEL = "INFO"
+HOST = "0.0.0.0"
+PORT = "8001"
+MAX_WORKERS = "4"
+TIMEOUT_SECONDS = "30"
+API_RATE_LIMIT = "100"
+FORCE_HTTPS = "true"
+
+[environments.staging]
+[environments.staging.variables]
+ENVIRONMENT = "staging"
+DEBUG = "true"
+LOG_LEVEL = "DEBUG"
+HOST = "0.0.0.0"
+PORT = "8001"
+MAX_WORKERS = "2"
+TIMEOUT_SECONDS = "30"
+API_RATE_LIMIT = "50" 
