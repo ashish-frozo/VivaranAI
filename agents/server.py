@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
         
         # Initialize router agent
         app_state["router"] = RouterAgent(
-            agent_registry=app_state["registry"],
+            registry=app_state["registry"],
             redis_url=redis_url
         )
         logger.info("Router agent initialized")
