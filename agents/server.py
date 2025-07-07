@@ -141,7 +141,8 @@ async def lifespan(app: FastAPI):
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/1")
         app_state["redis_manager"] = RedisStateManager(redis_url)
         
-        # Test Redis connection
+        # Connect and test Redis connection
+        await app_state["redis_manager"].connect()
         await app_state["redis_manager"].ping()
         logger.info("Redis connection established", redis_url=redis_url)
         
@@ -220,7 +221,7 @@ async def lifespan(app: FastAPI):
         
         # Close connections
         if app_state["redis_manager"]:
-            await app_state["redis_manager"].close()
+            await app_state["redis_manager"].disconnect()
         
         logger.info("Shutdown completed")
         

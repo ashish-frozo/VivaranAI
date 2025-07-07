@@ -113,6 +113,12 @@ class RedisStateManager:
             await self.redis_client.close()
             logger.info("Redis state manager disconnected")
     
+    async def ping(self):
+        """Test Redis connection."""
+        if not self.redis_client:
+            raise RuntimeError("Redis client not connected")
+        return await self.redis_client.ping()
+    
     # Document State Management
     
     async def store_document_state(
