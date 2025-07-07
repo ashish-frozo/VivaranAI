@@ -1,0 +1,449 @@
+name: VivaranAI CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Security and Code Quality
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit[toml] safety semgrep ruff
+        pip install -r requirements.txt
+    
+    - name: Run Bandit Security Scan
+      run: |
+        bandit -r . -f json -o bandit-report.json || true
+        bandit -r . -f txt
+      continue-on-error: true
+    
+    - name: Run Safety Check
+      run: |
+        safety check --json --output safety-report.json || true
+        safety check
+      continue-on-error: true
+    
+    - name: Run Semgrep
+      run: |
+        semgrep --config=auto --json --output=semgrep-report.json . || true
+        semgrep --config=auto .
+      continue-on-error: true
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+          semgrep-report.json
+        retention-days: 7
+
+  # Code Quality and Linting
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff mypy black isort
+        pip install -r requirements.txt
+    
+    - name: Run Ruff Linting
+      run: |
+        ruff check . --output-format=github
+        ruff format --check .
+    
+    - name: Run MyPy Type Checking
+      run: |
+        mypy . --ignore-missing-imports --install-types --non-interactive
+    
+    - name: Run Black Code Formatting Check
+      run: |
+        black --check --diff .
+    
+    - name: Run isort Import Sorting Check
+      run: |
+        isort --check-only --diff .
+
+  # Unit and Integration Tests
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    env:
+      REDIS_URL: redis://localhost:6379
+      ENVIRONMENT: test
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio pytest-xdist
+    
+    - name: Run Unit Tests
+      run: |
+        pytest tests/unit/ -v --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=80
+    
+    - name: Run Integration Tests
+      run: |
+        pytest tests/integration/ -v --maxfail=3
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  # Performance and Load Testing
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    env:
+      REDIS_URL: redis://localhost:6379
+      ENVIRONMENT: test
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install locust
+    
+    - name: Start application
+      run: |
+        cp env.example .env
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+        python simple_server.py &
+        sleep 30
+      continue-on-error: true
+    
+    - name: Run Load Tests
+      run: |
+        cd tests/performance/
+        locust --headless --users 10 --spawn-rate 2 -H http://localhost:8001 --run-time 2m --html=locust_report.html
+    
+    - name: Upload performance reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-reports
+        path: tests/performance/locust_report.html
+        retention-days: 7
+
+  # Build and Push Docker Image
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [security-scan, code-quality, test]
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+    
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        output-file: sbom.spdx.json
+    
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v3
+      with:
+        name: sbom
+        path: sbom.spdx.json
+        retention-days: 30
+
+  # Container Security Scanning
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, container-scan]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Kubernetes
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+    
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+    
+    - name: Deploy to staging
+      run: |
+        # Update image tag in deployment manifest
+        sed -i "s|image: vivaranai:latest|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:develop|g" k8s/deployment.yaml
+        
+        # Apply configurations
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/secret.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl apply -f k8s/ingress.yaml
+        
+        # Wait for deployment to complete
+        kubectl rollout status deployment/vivaranai-deployment -n vivaranai --timeout=300s
+        
+        # Run health checks
+        kubectl get pods -n vivaranai
+        kubectl get services -n vivaranai
+    
+    - name: Smoke Test Staging
+      run: |
+        # Wait for service to be ready
+        sleep 60
+        
+        # Basic health check
+        STAGING_URL="https://staging.vivaranai.com"
+        curl -f $STAGING_URL/health || exit 1
+        curl -f $STAGING_URL/ready || exit 1
+        
+        echo "Staging deployment successful!"
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, container-scan, deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Kubernetes
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+    
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+    
+    - name: Blue-Green Deploy to Production
+      run: |
+        # Update image tag in deployment manifest
+        sed -i "s|image: vivaranai:latest|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest|g" k8s/deployment.yaml
+        
+        # Deploy to green environment
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/secret.yaml
+        
+        # Create green deployment
+        sed 's/vivaranai-deployment/vivaranai-deployment-green/g' k8s/deployment.yaml > k8s/deployment-green.yaml
+        kubectl apply -f k8s/deployment-green.yaml
+        
+        # Wait for green deployment
+        kubectl rollout status deployment/vivaranai-deployment-green -n vivaranai --timeout=300s
+        
+        # Run health checks on green
+        kubectl port-forward deployment/vivaranai-deployment-green 8080:8001 -n vivaranai &
+        sleep 30
+        curl -f http://localhost:8080/health || exit 1
+        curl -f http://localhost:8080/ready || exit 1
+        
+        # Switch traffic to green
+        kubectl patch service vivaranai-service -n vivaranai -p '{"spec":{"selector":{"app":"vivaranai-green"}}}'
+        
+        # Wait and verify
+        sleep 60
+        
+        # Remove old blue deployment
+        kubectl delete deployment vivaranai-deployment -n vivaranai --ignore-not-found=true
+        
+        # Rename green to blue for next deployment
+        kubectl patch deployment vivaranai-deployment-green -n vivaranai -p '{"metadata":{"name":"vivaranai-deployment"}}'
+        
+        echo "Production deployment successful!"
+    
+    - name: Post-deploy Health Check
+      run: |
+        PRODUCTION_URL="https://api.vivaranai.com"
+        
+        # Health checks
+        curl -f $PRODUCTION_URL/health || exit 1
+        curl -f $PRODUCTION_URL/ready || exit 1
+        curl -f $PRODUCTION_URL/metrics || exit 1
+        
+        echo "Production health checks passed!"
+
+  # Notify deployment status
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always()
+    
+    steps:
+    - name: Send Slack notification
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Rollback on failure
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: failure()
+    environment: production
+    
+    steps:
+    - name: Rollback Production
+      run: |
+        kubectl rollout undo deployment/vivaranai-deployment -n vivaranai
+        kubectl rollout status deployment/vivaranai-deployment -n vivaranai --timeout=300s
+        echo "Rollback completed" 
