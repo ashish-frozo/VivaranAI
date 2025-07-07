@@ -187,7 +187,7 @@ ipython==8.17.2
 ipdb==0.13.13
 
 # Version Management
-packaging>=21.0,<22.0
+# packaging - let pip resolve this automatically due to complex dependencies
 setuptools==69.0.2
 
 # HTTP/2 Support
