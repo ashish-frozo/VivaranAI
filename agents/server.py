@@ -157,6 +157,9 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Router agent initialized")
         
+        # Get OpenAI API key for enhanced router and medical agent
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        
         # Initialize enhanced router agent with OCR and classification
         app_state["enhanced_router"] = EnhancedRouterAgent(
             registry=app_state["registry"],
@@ -166,7 +169,6 @@ async def lifespan(app: FastAPI):
         logger.info("Enhanced router agent initialized")
         
         # Initialize medical bill agent
-        openai_api_key = os.getenv("OPENAI_API_KEY")
         app_state["medical_agent"] = MedicalBillAgent(
             redis_url=redis_url,
             openai_api_key=openai_api_key
