@@ -175,7 +175,7 @@ async def lifespan(app: FastAPI):
             openai_api_key=openai_api_key
         )
         
-        # Register medical bill agent with capabilities
+        # Register medical bill agent with capabilities (updated parameters)
         capabilities = AgentCapabilities(
             supported_tasks=[
                 TaskCapability.DOCUMENT_PROCESSING,
