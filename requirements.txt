@@ -60,7 +60,7 @@ tenacity==8.2.3
 
 # Configuration and secrets
 pyyaml==6.0.1
-cryptography==41.0.8
+cryptography>=41.0.0,<46.0.0
 
 # Production ASGI server
 gunicorn==21.2.0
