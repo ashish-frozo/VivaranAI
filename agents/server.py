@@ -184,11 +184,12 @@ async def lifespan(app: FastAPI):
                 TaskCapability.CONFIDENCE_SCORING
             ],
             max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
-            estimated_cost_per_request=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
-            estimated_response_time_ms=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
-            supported_file_formats=["pdf", "jpg", "png", "jpeg"],
-            supported_languages=["english", "hindi"],
-            state_support=True
+            preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
+            processing_time_ms_avg=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
+            cost_per_request_rupees=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
+            confidence_threshold=0.85,
+            supported_document_types=["pdf", "jpg", "png", "jpeg"],
+            supported_languages=["english", "hindi"]
         )
         
         registration = await app_state["registry"].register_agent(
@@ -579,7 +580,7 @@ async def list_agents():
                 "status": agent.status.value,
                 "capabilities": [cap.value for cap in agent.capabilities.supported_tasks],
                 "max_concurrent_requests": agent.capabilities.max_concurrent_requests,
-                "estimated_cost": agent.capabilities.estimated_cost_per_request,
+                "estimated_cost": agent.capabilities.cost_per_request_rupees,
                 "last_heartbeat": agent.last_heartbeat.isoformat() if agent.last_heartbeat else None
             })
         
@@ -607,20 +608,21 @@ async def get_agent_details(agent_id: str):
             "capabilities": {
                 "supported_tasks": [cap.value for cap in agent.capabilities.supported_tasks],
                 "max_concurrent_requests": agent.capabilities.max_concurrent_requests,
-                "estimated_cost_per_request": agent.capabilities.estimated_cost_per_request,
-                "estimated_response_time_ms": agent.capabilities.estimated_response_time_ms,
-                "supported_file_formats": agent.capabilities.supported_file_formats,
+                "cost_per_request_rupees": agent.capabilities.cost_per_request_rupees,
+                "processing_time_ms_avg": agent.capabilities.processing_time_ms_avg,
+                "confidence_threshold": agent.capabilities.confidence_threshold,
+                "supported_document_types": agent.capabilities.supported_document_types,
                 "supported_languages": agent.capabilities.supported_languages,
-                "state_support": agent.capabilities.state_support
+                "preferred_model_hints": [hint.value for hint in agent.capabilities.preferred_model_hints]
             },
             "registration_time": agent.registration_time.isoformat() if agent.registration_time else None,
             "last_heartbeat": agent.last_heartbeat.isoformat() if agent.last_heartbeat else None,
-            "current_load": agent.current_load,
+            "current_requests": agent.current_requests,
             "performance_metrics": {
-                "success_rate": agent.performance_metrics.success_rate,
-                "average_response_time": agent.performance_metrics.average_response_time,
-                "total_requests": agent.performance_metrics.total_requests,
-                "failed_requests": agent.performance_metrics.failed_requests
+                "total_requests": agent.total_requests,
+                "total_errors": agent.total_errors,
+                "avg_response_time_ms": agent.avg_response_time_ms,
+                "success_rate": (agent.total_requests - agent.total_errors) / max(agent.total_requests, 1)
             }
         }
         
