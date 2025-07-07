@@ -165,7 +165,8 @@ class RouterAgent(BaseAgent):
         )
         
         self.registry = registry or agent_registry
-        self.state_manager = state_manager or globals()['state_manager']
+        from .redis_state import state_manager as default_state_manager
+        self.state_manager = state_manager or default_state_manager
         
         # Routing configuration
         self.DEFAULT_TIMEOUT = 30  # seconds
