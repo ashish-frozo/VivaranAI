@@ -85,15 +85,13 @@ class RedFlag(BaseModel):
     unit_cost: Optional[Decimal] = Field(
         default=None,
         description="Unit cost in rupees",
-        ge=0,
-        decimal_places=2
+        ge=0
     )
     
     billed: Decimal = Field(
         ...,
         description="Amount billed in rupees",
         ge=0,
-        decimal_places=2,
         example=4500.00
     )
     
@@ -101,15 +99,13 @@ class RedFlag(BaseModel):
         default=None,
         description="Maximum allowed rate (CGHS/ESI) in rupees",
         ge=0,
-        decimal_places=2,
         example=2500.00
     )
     
     overcharge_amount: Optional[Decimal] = Field(
         default=None,
         description="Over-charge amount in rupees",
-        ge=0,
-        decimal_places=2
+        ge=0
     )
     
     overcharge_pct: Optional[float] = Field(
@@ -256,15 +252,13 @@ class LineItem(BaseModel):
     unit_cost: Optional[Decimal] = Field(
         default=None,
         description="Unit cost in rupees",
-        ge=0,
-        decimal_places=2
+        ge=0
     )
     
     total_amount: Decimal = Field(
         ...,
         description="Total amount for this line item in rupees",
-        ge=0,
-        decimal_places=2
+        ge=0
     )
     
     item_type: LineItemType = Field(
