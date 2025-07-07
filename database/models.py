@@ -16,7 +16,7 @@ from enum import Enum
 
 from sqlalchemy import (
     Column, String, Integer, DateTime, Boolean, Text, JSON, 
-    ForeignKey, Index, func, BigInteger, Numeric, create_engine
+    ForeignKey, Index, func, BigInteger, Numeric, create_engine, select
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
