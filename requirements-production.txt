@@ -94,7 +94,7 @@ jsonschema==4.20.0
 
 # Networking & Protocol Support
 websockets==12.0
-socket.io==5.10.0
+python-socketio==5.10.0
 
 # File Storage & Processing
 minio==7.2.0
@@ -131,9 +131,7 @@ xmltodict==0.13.0
 anyio==4.1.0
 trio==0.23.1
 
-# UUID & Hashing
-uuid==1.30
-hashlib==20081119
+# UUID & Hashing utilities (built-in modules, no external dependencies needed)
 
 # Progress Bars & CLI Tools
 tqdm==4.66.1
@@ -147,8 +145,7 @@ health-check==1.3.3
 # Rate Limiting
 slowapi==0.1.9
 
-# CORS & Security Headers
-python-cors==1.0.0
+# CORS & Security Headers (FastAPI has built-in CORS middleware)
 
 # Memory & Resource Management
 memory-profiler==0.61.0
@@ -184,7 +181,6 @@ orjson==3.9.10
 
 # System Integration
 psutil==5.9.6
-platform==1.0.8
 
 # Development & Debugging
 ipython==8.17.2
@@ -229,8 +225,7 @@ termcolor==2.4.0
 # File System Watching
 watchdog==3.0.0
 
-# Backup & Archive
-python-tarfile==0.9.0
+# Backup & Archive (tarfile is built-in to Python)
 
 # Network Security
 pyopenssl==23.3.0
