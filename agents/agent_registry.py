@@ -411,6 +411,14 @@ class AgentRegistry:
         await self._refresh_cache_if_needed()
         return list(self._agent_cache.values())
     
+    async def list_online_agents(self) -> List[AgentRegistration]:
+        """List only online agents."""
+        await self._refresh_cache_if_needed()
+        return [
+            agent for agent in self._agent_cache.values() 
+            if agent.status == AgentStatus.ONLINE
+        ]
+    
     async def update_agent_metrics(
         self,
         agent_id: str,
