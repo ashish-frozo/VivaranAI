@@ -193,14 +193,15 @@ async def lifespan(app: FastAPI):
             supported_languages=["english", "hindi"]
         )
         
-        registration = await app_state["registry"].register_agent(
-            agent_id=app_state["medical_agent"].agent_id,
-            name=app_state["medical_agent"].name,
-            capabilities=capabilities,
-            agent_instance=app_state["medical_agent"]
+        registration_success = await app_state["registry"].register_agent(
+            agent=app_state["medical_agent"],
+            capabilities=capabilities
         )
         
-        logger.info("Medical bill agent registered", agent_id=registration.agent_id)
+        if registration_success:
+            logger.info("Medical bill agent registered", agent_id=app_state["medical_agent"].agent_id)
+        else:
+            raise Exception("Failed to register medical bill agent")
         
         # Start background tasks
         asyncio.create_task(update_metrics_background())
