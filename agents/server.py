@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from agents.medical_bill_agent import MedicalBillAgent
 from agents.agent_registry import AgentRegistry, TaskCapability, AgentCapabilities
+from agents.base_agent import ModelHint
 from agents.router_agent import RouterAgent, RoutingStrategy, RoutingRequest
 from agents.redis_state import RedisStateManager
 from agents.tools.enhanced_router_agent import EnhancedRouterAgent
