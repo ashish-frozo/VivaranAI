@@ -71,4 +71,4 @@ playwright==1.40.0  # For future browser automation
 lxml==4.9.3  # XML/HTML parser for BeautifulSoup 
 
 # OAuth2 and Social Authentication
-authlib==1.2.1 
+authlib==1.2.1 # Force Railway rebuild - Thu Jul 10 12:13:25 IST 2025
