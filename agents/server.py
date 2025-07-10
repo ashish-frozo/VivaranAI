@@ -26,10 +26,12 @@ from pydantic import BaseModel, Field
 
 from agents.medical_bill_agent import MedicalBillAgent
 from agents.agent_registry import AgentRegistry, TaskCapability, AgentCapabilities
-from agents.base_agent import ModelHint
+from agents.base_agent import ModelHint, AgentContext
 from agents.router_agent import RouterAgent, RoutingStrategy, RoutingRequest
 from agents.redis_state import RedisStateManager
 from agents.tools.enhanced_router_agent import EnhancedRouterAgent
+from security.oauth2_endpoints import oauth2_router
+from security.auth_middleware import auth_manager
 
 # Configure structured logging
 structlog.configure(
@@ -147,6 +149,10 @@ async def lifespan(app: FastAPI):
         await app_state["redis_manager"].ping()
         logger.info("Redis connection established", redis_url=redis_url)
         
+        # Initialize auth manager
+        await auth_manager.initialize()
+        logger.info("Auth manager initialized")
+        
         # Initialize agent registry
         app_state["registry"] = AgentRegistry(redis_url=redis_url)
         await app_state["registry"].start()
@@ -259,6 +265,13 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Include OAuth2 router
+app.include_router(oauth2_router)
+
+# Initialize auth manager on startup
+@app.on_event("startup")
+async def startup_event():
+    await auth_manager.initialize()
 
 # Middleware for metrics collection
 @app.middleware("http")
@@ -375,10 +388,19 @@ async def metrics_summary():
     except Exception:
         active_count = 0
     
+    # Get total analysis count across all labels
+    try:
+        # Get the total count by summing all label values
+        total_analyses = 0
+        for sample in analysis_count.collect()[0].samples:
+            total_analyses += sample.value
+    except Exception:
+        total_analyses = 0
+    
     return MetricsResponse(
         timestamp=current_time,
         active_agents=active_count,
-        total_analyses=int(analysis_count._value.sum()),
+        total_analyses=int(total_analyses),
         average_confidence=0.85,  # This would be calculated from real data
         uptime_seconds=uptime
     )
@@ -526,8 +548,17 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest, background
         }
         
         # Execute enhanced analysis workflow
+        # Create proper AgentContext for enhanced router
+        context = AgentContext(
+            doc_id=request.doc_id,
+            user_id=request.user_id,
+            correlation_id=f"enhanced_analysis_{request.doc_id}_{int(time.time())}",
+            model_hint=ModelHint.STANDARD,
+            start_time=time.time()
+        )
+        
         result = await app_state["enhanced_router"].process_task(
-            context=None,  # Enhanced router will create its own context
+            context=context,
             task_data=task_data
         )
         

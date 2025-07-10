@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VivaranAI - Medical Bill Analysis with OAuth2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .auth-btn {
+            @apply flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200;
+        }
+        
+        .google-btn {
+            @apply bg-red-600 hover:bg-red-700 focus:ring-red-500;
+        }
+        
+        .github-btn {
+            @apply bg-gray-800 hover:bg-gray-900 focus:ring-gray-500;
+        }
+        
+        .login-card {
+            @apply max-w-md mx-auto mt-8 bg-white shadow-lg rounded-lg overflow-hidden;
+        }
+        
+        .dashboard-hidden {
+            display: none;
+        }
+        
+        .login-hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div x-data="authApp()" x-init="init()" class="min-h-screen">
+        
+        <!-- Navigation -->
+        <nav class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <h1 class="text-xl font-bold text-gray-900">VivaranAI</h1>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div x-show="isAuthenticated" class="flex items-center space-x-4">
+                            <div class="text-sm text-gray-600">
+                                <span x-text="user.email"></span>
+                            </div>
+                            <button @click="logout()" class="auth-btn bg-red-600 hover:bg-red-700 focus:ring-red-500">
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Login Section -->
+        <div x-show="!isAuthenticated" class="container mx-auto p-4">
+            <div class="login-card">
+                <div class="px-6 py-8">
+                    <div class="text-center">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">Welcome to VivaranAI</h2>
+                        <p class="text-gray-600 mb-8">Sign in to access medical bill analysis</p>
+                    </div>
+                    
+                    <!-- OAuth2 Login Buttons -->
+                    <div class="space-y-4">
+                        <button x-show="providers.google" @click="loginWithGoogle()" 
+                                class="auth-btn google-btn w-full">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                            </svg>
+                            Continue with Google
+                        </button>
+                        
+                        <button x-show="providers.github" @click="loginWithGitHub()" 
+                                class="auth-btn github-btn w-full">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                            </svg>
+                            Continue with GitHub
+                        </button>
+                    </div>
+                    
+                    <div x-show="error" class="mt-4 p-4 bg-red-50 rounded-md">
+                        <p class="text-sm text-red-700" x-text="error"></p>
+                    </div>
+                    
+                    <div x-show="loading" class="mt-4 text-center">
+                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <p class="mt-2 text-sm text-gray-600">Authenticating...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div x-show="isAuthenticated" class="container mx-auto p-4">
+            
+            <!-- User Info -->
+            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span class="text-blue-600 font-semibold text-lg" x-text="user.email ? user.email.charAt(0).toUpperCase() : 'U'"></span>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900" x-text="user.email"></h3>
+                        <p class="text-sm text-gray-600">Role: <span x-text="user.role"></span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">System Status</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-green-50 rounded-lg p-4">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-green-800">API Status</p>
+                                <p class="text-sm text-green-600" x-text="systemStatus.api"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-blue-800">Active Agents</p>
+                                <p class="text-sm text-blue-600" x-text="systemStatus.agents"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                <div class="w-3 h-3 bg-purple-500 rounded-full"></div>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-purple-800">Uptime</p>
+                                <p class="text-sm text-purple-600" x-text="systemStatus.uptime"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-4">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                                <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-yellow-800">Analyses</p>
+                                <p class="text-sm text-yellow-600" x-text="systemStatus.analyses"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Upload -->
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Medical Bill Analysis</h3>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors duration-200"
+                     @dragover.prevent="dragOver = true" 
+                     @dragleave.prevent="dragOver = false"
+                     @drop.prevent="handleDrop($event)"
+                     :class="{'border-blue-400 bg-blue-50': dragOver}">
+                    
+                    <div class="space-y-4">
+                        <div class="flex justify-center">
+                            <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        
+                        <div>
+                            <p class="text-lg font-medium text-gray-900">Upload Medical Bill</p>
+                            <p class="text-sm text-gray-500 mt-1">Drag and drop or click to select files</p>
+                        </div>
+                        
+                        <div class="flex justify-center">
+                            <label class="auth-btn cursor-pointer">
+                                <input type="file" @change="handleFileSelect($event)" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
+                                Choose File
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Analysis Results -->
+                <div x-show="analysisResult" class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">Analysis Results</h4>
+                    <pre class="text-sm text-gray-600 whitespace-pre-wrap" x-text="JSON.stringify(analysisResult, null, 2)"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function authApp() {
+            return {
+                isAuthenticated: false,
+                user: {},
+                providers: {},
+                token: null,
+                error: null,
+                loading: false,
+                dragOver: false,
+                systemStatus: {
+                    api: 'Online',
+                    agents: '0',
+                    uptime: '0s',
+                    analyses: '0'
+                },
+                analysisResult: null,
+                
+                async init() {
+                    // Check for token in URL parameters (from OAuth callback)
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const token = urlParams.get('token');
+                    const error = urlParams.get('error');
+                    
+                    if (token) {
+                        this.token = token;
+                        localStorage.setItem('access_token', token);
+                        // Clean up URL
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        await this.fetchUserInfo();
+                    } else if (error) {
+                        this.error = 'Authentication failed. Please try again.';
+                    } else {
+                        // Check for stored token
+                        const storedToken = localStorage.getItem('access_token');
+                        if (storedToken) {
+                            this.token = storedToken;
+                            await this.fetchUserInfo();
+                        }
+                    }
+                    
+                    // Fetch available providers
+                    await this.fetchProviders();
+                    
+                    // Start status monitoring if authenticated
+                    if (this.isAuthenticated) {
+                        this.startStatusMonitoring();
+                    }
+                },
+                
+                async fetchProviders() {
+                    try {
+                        const response = await fetch('/auth/providers');
+                        const data = await response.json();
+                        this.providers = data.providers || {};
+                    } catch (error) {
+                        console.error('Failed to fetch providers:', error);
+                    }
+                },
+                
+                async fetchUserInfo() {
+                    try {
+                        const response = await fetch('/auth/me', {
+                            headers: {
+                                'Authorization': `Bearer ${this.token}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            this.user = await response.json();
+                            this.isAuthenticated = true;
+                            this.error = null;
+                        } else {
+                            throw new Error('Failed to fetch user info');
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch user info:', error);
+                        this.token = null;
+                        localStorage.removeItem('access_token');
+                        this.isAuthenticated = false;
+                        this.error = 'Session expired. Please log in again.';
+                    }
+                },
+                
+                loginWithGoogle() {
+                    this.loading = true;
+                    this.error = null;
+                    const currentUrl = window.location.origin + window.location.pathname;
+                    window.location.href = `/auth/google/login?redirect_url=${encodeURIComponent(currentUrl)}`;
+                },
+                
+                loginWithGitHub() {
+                    this.loading = true;
+                    this.error = null;
+                    const currentUrl = window.location.origin + window.location.pathname;
+                    window.location.href = `/auth/github/login?redirect_url=${encodeURIComponent(currentUrl)}`;
+                },
+                
+                async logout() {
+                    try {
+                        await fetch('/auth/logout', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${this.token}`
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                    }
+                    
+                    this.token = null;
+                    this.user = {};
+                    this.isAuthenticated = false;
+                    localStorage.removeItem('access_token');
+                },
+                
+                startStatusMonitoring() {
+                    this.updateSystemStatus();
+                    setInterval(() => {
+                        this.updateSystemStatus();
+                    }, 5000);
+                },
+                
+                async updateSystemStatus() {
+                    try {
+                        const response = await fetch('/health');
+                        const data = await response.json();
+                        
+                        this.systemStatus = {
+                            api: data.status === 'healthy' ? 'Online' : 'Offline',
+                            agents: '1', // Will be updated with real data
+                            uptime: this.formatUptime(data.uptime_seconds),
+                            analyses: '0' // Will be updated with real data
+                        };
+                    } catch (error) {
+                        this.systemStatus.api = 'Offline';
+                    }
+                },
+                
+                formatUptime(seconds) {
+                    const hours = Math.floor(seconds / 3600);
+                    const minutes = Math.floor((seconds % 3600) / 60);
+                    return `${hours}h ${minutes}m`;
+                },
+                
+                handleDrop(event) {
+                    this.dragOver = false;
+                    const files = event.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.processFile(files[0]);
+                    }
+                },
+                
+                handleFileSelect(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        this.processFile(file);
+                    }
+                },
+                
+                async processFile(file) {
+                    try {
+                        this.loading = true;
+                        this.error = null;
+                        this.analysisResult = null;
+                        
+                        // Convert file to base64
+                        const base64 = await this.fileToBase64(file);
+                        
+                        // Send to analysis endpoint
+                        const response = await fetch('/analyze', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${this.token}`
+                            },
+                            body: JSON.stringify({
+                                file_content: base64,
+                                doc_id: `doc_${Date.now()}`,
+                                user_id: this.user.user_id,
+                                file_format: file.type.split('/')[1] || 'pdf'
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            this.analysisResult = await response.json();
+                        } else {
+                            throw new Error('Analysis failed');
+                        }
+                    } catch (error) {
+                        this.error = `File processing failed: ${error.message}`;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                fileToBase64(file) {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(file);
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = error => reject(error);
+                    });
+                }
+            };
+        }
+    </script>
+</body>
+</html> 

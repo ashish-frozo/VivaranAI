@@ -34,6 +34,15 @@ VivaranAI MedBillGuardAgent is a revolutionary AI-powered system that automatica
 - **🌐 Production Frontend**: Comprehensive testing dashboard with real-time monitoring
 - **📊 Live Metrics**: Real-time performance monitoring and system health checks
 - **🔒 Security**: SSL/TLS encryption, secure API key management
+- **🔐 OAuth2 Authentication**: Google and GitHub login support
+
+### OAuth2 Authentication
+- **🔑 Google OAuth2**: Secure login with Google accounts
+- **🔑 GitHub OAuth2**: Secure login with GitHub accounts
+- **🎫 JWT Tokens**: Secure session management with automatic expiration
+- **👥 Role-based Access Control**: User permissions and role management
+- **🔒 CSRF Protection**: State-based security for OAuth2 flows
+- **🍪 Secure Cookies**: HTTPOnly and secure cookie management
 
 ### AI Web Scraping System
 - **🧠 Entity Extraction**: GPT-4 powered extraction of medical entities from documents
@@ -147,14 +156,47 @@ pip install -r requirements-dev.txt  # For development
 #### 3. Configure API Keys
 ```bash
 # Set OpenAI API key
-export OPENAI_API_KEY="your-openai-api-key-here"
+export OPENAI_API_KEY="your-openai-api-key"
 
 # Optional: Set other API keys for enhanced features
 export GOOGLE_API_KEY="your-google-api-key"
 export AZURE_API_KEY="your-azure-api-key"
+
+# OAuth2 Configuration (optional)
+export GOOGLE_CLIENT_ID="your-google-client-id"
+export GOOGLE_CLIENT_SECRET="your-google-client-secret"
+export GITHUB_CLIENT_ID="your-github-client-id"
+export GITHUB_CLIENT_SECRET="your-github-client-secret"
+export JWT_SECRET_KEY="your-jwt-secret-key"
 ```
 
-#### 4. Run the Application
+#### 4. OAuth2 Setup (Optional)
+
+For OAuth2 authentication with Google and GitHub:
+
+1. **Setup OAuth2 Applications**:
+   - [Google OAuth2 Setup](https://console.cloud.google.com/)
+   - [GitHub OAuth2 Setup](https://github.com/settings/developers)
+
+2. **Configure Environment Variables**:
+   ```bash
+   cp env.example .env
+   # Edit .env with your OAuth2 credentials
+   ```
+
+3. **Start OAuth2 Frontend**:
+   ```bash
+   ./start_oauth_frontend.sh
+   ```
+
+4. **Test OAuth2 Login**:
+   - Visit `http://localhost:3000/index-oauth.html`
+   - Click "Continue with Google" or "Continue with GitHub"
+   - Complete authentication and start using the system
+
+📚 **Detailed OAuth2 Setup Guide**: [docs/OAUTH2_SETUP.md](docs/OAUTH2_SETUP.md)
+
+#### 5. Run the Application
 
 ##### Option A: Simple Server (Recommended for testing)
 ```bash
