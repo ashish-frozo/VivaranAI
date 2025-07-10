@@ -60,11 +60,12 @@ try:
     active_agents = Gauge('medbillguard_active_agents', 'Number of active agents', ['agent_type'])
     analysis_count = Counter('medbillguard_analysis_total', 'Total medical bill analyses', ['verdict', 'agent_id'])
     analysis_duration = Histogram('medbillguard_analysis_duration_seconds', 'Analysis duration', ['agent_id'])
+    logger.info("Prometheus metrics initialized successfully")
 except ValueError as e:
-    # Metrics already registered, get existing instances
+    logger.warning(f"Prometheus metrics already registered: {e}")
+    # Get existing metrics or set to None
     from prometheus_client import REGISTRY
     
-    # Get existing metrics or create new ones
     request_count = None
     request_duration = None
     active_agents = None
@@ -84,7 +85,15 @@ except ValueError as e:
             elif collector._name == 'medbillguard_analysis_duration_seconds':
                 analysis_duration = collector
     
-    logger.warning(f"Prometheus metrics already registered: {e}")
+    logger.info(f"Using existing metrics: request_count={request_count is not None}, analysis_count={analysis_count is not None}")
+except Exception as e:
+    logger.error(f"Failed to initialize Prometheus metrics: {e}")
+    # Set all metrics to None if initialization fails
+    request_count = None
+    request_duration = None
+    active_agents = None
+    analysis_count = None
+    analysis_duration = None
 
 # Global state
 app_state = {
@@ -302,25 +311,49 @@ async def startup_event():
 # Middleware for metrics collection
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
+    """Middleware to collect request metrics."""
     start_time = time.time()
+    method = request.method
+    path = request.url.path
     
-    response = await call_next(request)
+    # Skip metrics collection if metrics are not initialized
+    if not all([request_count, request_duration]):
+        response = await call_next(request)
+        return response
     
-    duration = time.time() - start_time
-    
-    # Record metrics
-    request_count.labels(
-        method=request.method,
-        endpoint=request.url.path,
-        status=response.status_code
-    ).inc()
-    
-    request_duration.labels(
-        method=request.method,
-        endpoint=request.url.path
-    ).observe(duration)
-    
-    return response
+    try:
+        response = await call_next(request)
+        
+        # Record metrics
+        status_code = response.status_code
+        duration = time.time() - start_time
+        
+        # Update metrics safely
+        if request_count and hasattr(request_count, 'labels'):
+            request_count.labels(
+                method=method,
+                endpoint=path,
+                status=str(status_code)
+            ).inc()
+        
+        if request_duration and hasattr(request_duration, 'labels'):
+            request_duration.labels(
+                method=method,
+                endpoint=path
+            ).observe(duration)
+        
+        return response
+        
+    except Exception as e:
+        # Record error metrics
+        if request_count and hasattr(request_count, 'labels'):
+            request_count.labels(
+                method=method,
+                endpoint=path,
+                status="500"
+            ).inc()
+        
+        raise e
 
 
 # Health check endpoints
@@ -404,30 +437,32 @@ async def metrics():
 
 @app.get("/metrics/summary", response_model=MetricsResponse)
 async def metrics_summary():
-    """Human-readable metrics summary."""
+    """Get aggregated metrics summary."""
     current_time = time.time()
     uptime = current_time - app_state["startup_time"] if app_state["startup_time"] else 0
     
-    try:
-        online_agents = await app_state["registry"].list_online_agents()
-        active_count = len(online_agents)
-    except Exception:
-        active_count = 0
-    
     # Get total analysis count across all labels
     try:
-        # Get the total count by summing all label values
         total_analyses = 0
-        for sample in analysis_count.collect()[0].samples:
-            total_analyses += sample.value
+        if analysis_count and hasattr(analysis_count, 'collect'):
+            for sample in analysis_count.collect()[0].samples:
+                total_analyses += sample.value
     except Exception:
         total_analyses = 0
+    
+    # Get active agents count
+    try:
+        active_agents_count = 0
+        if active_agents and hasattr(active_agents, '_value'):
+            active_agents_count = int(active_agents._value)
+    except Exception:
+        active_agents_count = 0
     
     return MetricsResponse(
         timestamp=current_time,
-        active_agents=active_count,
-        total_analyses=int(total_analyses),
-        average_confidence=0.85,  # This would be calculated from real data
+        active_agents=active_agents_count,
+        total_analyses=total_analyses,
+        average_confidence=0.85,  # Default placeholder
         uptime_seconds=uptime
     )
 

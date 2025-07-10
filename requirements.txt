@@ -1,4 +1,6 @@
 # Production dependencies for MedBillGuard Agent System
+# FORCE REBUILD - Railway cache clear - 2025-07-10
+# This ensures OAuth2 dependencies are properly installed
 
 # Core framework dependencies
 fastapi==0.104.1
@@ -70,8 +72,8 @@ beautifulsoup4==4.13.4
 playwright==1.40.0  # For future browser automation
 lxml==4.9.3  # XML/HTML parser for BeautifulSoup 
 
-# OAuth2 and Social Authentication
-authlib==1.2.1 
+# OAuth2 and Social Authentication - CRITICAL FOR RAILWAY
+authlib==1.2.1
 email-validator==2.2.0
 
 # Force Railway rebuild - Thu Jul 10 12:13:25 IST 2025

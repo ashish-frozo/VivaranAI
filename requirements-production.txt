@@ -19,6 +19,10 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 cryptography>=41.0.0,<46.0.0
 
+# OAuth2 & Social Authentication - CRITICAL FOR RAILWAY
+authlib==1.2.1
+email-validator==2.2.0
+
 # Caching & Performance
 redis==5.0.1
 aioredis==2.0.1
