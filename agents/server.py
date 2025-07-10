@@ -169,116 +169,101 @@ class MetricsResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan management."""
+    """Manage FastAPI application lifespan."""
     # Startup
     logger.info("Starting MedBillGuard Agent Server")
-    app_state["startup_time"] = time.time()
     
+    # Initialize Redis Manager
     try:
-        # Initialize Redis connection
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/1")
-        app_state["redis_manager"] = RedisStateManager(redis_url)
-        
-        # Connect and test Redis connection
         await app_state["redis_manager"].connect()
-        await app_state["redis_manager"].ping()
-        logger.info("Redis connection established", redis_url=redis_url)
-        
-        # Initialize auth manager
-        await auth_manager.initialize()
-        logger.info("Auth manager initialized")
-        
-        # Initialize agent registry
-        app_state["registry"] = AgentRegistry(redis_url=redis_url)
-        await app_state["registry"].start()
-        logger.info("Agent registry initialized and started")
-        
-        # Initialize router agent
-        app_state["router"] = RouterAgent(
-            registry=app_state["registry"],
-            redis_url=redis_url
-        )
-        logger.info("Router agent initialized")
-        
-        # Get OpenAI API key for enhanced router and medical agent
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        
-        # Initialize enhanced router agent with OCR and classification
-        app_state["enhanced_router"] = EnhancedRouterAgent(
-            registry=app_state["registry"],
-            redis_url=redis_url,
-            openai_api_key=openai_api_key
-        )
-        logger.info("Enhanced router agent initialized")
-        
-        # Initialize medical bill agent
-        app_state["medical_agent"] = MedicalBillAgent(
-            redis_url=redis_url,
-            openai_api_key=openai_api_key
-        )
-        
-        # Register medical bill agent with capabilities (updated parameters)
-        capabilities = AgentCapabilities(
-            supported_tasks=[
-                TaskCapability.DOCUMENT_PROCESSING,
-                TaskCapability.RATE_VALIDATION,
-                TaskCapability.DUPLICATE_DETECTION,
-                TaskCapability.PROHIBITED_DETECTION,
-                TaskCapability.CONFIDENCE_SCORING
-            ],
-            max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
-            preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
-            processing_time_ms_avg=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
-            cost_per_request_rupees=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
-            confidence_threshold=0.85,
-            supported_document_types=["pdf", "jpg", "png", "jpeg"],
-            supported_languages=["english", "hindi"]
-        )
-        
-        registration_success = await app_state["registry"].register_agent(
-            agent=app_state["medical_agent"],
-            capabilities=capabilities
-        )
-        
-        if registration_success:
-            logger.info("Medical bill agent registered", agent_id=app_state["medical_agent"].agent_id)
-        else:
-            raise Exception("Failed to register medical bill agent")
-        
-        # Start background tasks
-        asyncio.create_task(update_metrics_background())
-        
-        logger.info("MedBillGuard Agent Server started successfully")
-        
-        yield
-        
+        logger.info("Redis connected successfully")
     except Exception as e:
-        logger.error("Failed to start server", error=str(e), exc_info=True)
-        raise
+        logger.warning(f"Redis connection failed, continuing without Redis: {e}")
+        # Continue without Redis - production Railway will have Redis
+    
+    # Initialize Agent Registry
+    try:
+        await app_state["registry"].start()
+        logger.info("Agent registry initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize agent registry: {e}")
+        # Continue without registry - basic functionality will work
+    
+    # Initialize OAuth2 Manager
+    try:
+        await auth_manager.initialize()
+        logger.info("OAuth2 manager initialized")
+    except Exception as e:
+        logger.warning(f"OAuth2 manager initialization failed: {e}")
+        # Continue without OAuth2 - basic analysis will work
+    
+    # Initialize Medical Bill Agent
+    try:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if openai_api_key:
+            # Register medical bill agent with capabilities
+            capabilities = AgentCapabilities(
+                supported_tasks=[
+                    TaskCapability.DOCUMENT_PROCESSING,
+                    TaskCapability.RATE_VALIDATION,
+                    TaskCapability.DUPLICATE_DETECTION,
+                    TaskCapability.PROHIBITED_DETECTION,
+                    TaskCapability.CONFIDENCE_SCORING
+                ],
+                max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
+                preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
+                processing_time_ms_avg=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
+                cost_per_request_rupees=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
+                confidence_threshold=0.85,
+                supported_document_types=["pdf", "jpg", "png", "jpeg"],
+                supported_languages=["english", "hindi"]
+            )
+            
+            registration_success = await app_state["registry"].register_agent(
+                agent=app_state["medical_agent"],
+                capabilities=capabilities
+            )
+            
+            if registration_success:
+                logger.info("Medical bill agent registered", agent_id=app_state["medical_agent"].agent_id)
+            else:
+                logger.warning("Failed to register medical bill agent")
+        else:
+            logger.warning("OpenAI API key not found, medical agent not registered")
+    except Exception as e:
+        logger.warning(f"Medical agent registration failed: {e}")
+    
+    # Start background tasks
+    try:
+        asyncio.create_task(update_metrics_background())
+        logger.info("Background tasks started")
+    except Exception as e:
+        logger.warning(f"Background tasks failed to start: {e}")
+    
+    # Record startup time
+    app_state["startup_time"] = time.time()
+    logger.info("Server startup completed successfully")
+    
+    yield
     
     # Shutdown
     logger.info("Shutting down MedBillGuard Agent Server")
-    app_state["shutdown_event"].set()
     
+    # Cleanup Redis
     try:
-        # Deregister agent
-        if app_state["registry"] and app_state["medical_agent"]:
-            await app_state["registry"].deregister_agent(app_state["medical_agent"].agent_id)
-            logger.info("Agent deregistered")
-        
-        # Stop registry
-        if app_state["registry"]:
-            await app_state["registry"].stop()
-            logger.info("Agent registry stopped")
-        
-        # Close connections
-        if app_state["redis_manager"]:
-            await app_state["redis_manager"].disconnect()
-        
-        logger.info("Shutdown completed")
-        
+        await app_state["redis_manager"].close()
+        logger.info("Redis connection closed")
     except Exception as e:
-        logger.error("Error during shutdown", error=str(e))
+        logger.warning(f"Redis cleanup failed: {e}")
+    
+    # Cleanup Registry
+    try:
+        await app_state["registry"].stop()
+        logger.info("Agent registry cleaned up")
+    except Exception as e:
+        logger.warning(f"Registry cleanup failed: {e}")
+    
+    logger.info("Server shutdown completed")
 
 
 # Create FastAPI app
