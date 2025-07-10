@@ -54,11 +54,37 @@ structlog.configure(
 logger = structlog.get_logger(__name__)
 
 # Prometheus metrics
-request_count = Counter('medbillguard_requests_total', 'Total requests', ['method', 'endpoint', 'status'])
-request_duration = Histogram('medbillguard_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
-active_agents = Gauge('medbillguard_active_agents', 'Number of active agents', ['agent_type'])
-analysis_count = Counter('medbillguard_analysis_total', 'Total medical bill analyses', ['verdict', 'agent_id'])
-analysis_duration = Histogram('medbillguard_analysis_duration_seconds', 'Analysis duration', ['agent_id'])
+try:
+    request_count = Counter('medbillguard_requests_total', 'Total requests', ['method', 'endpoint', 'status'])
+    request_duration = Histogram('medbillguard_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
+    active_agents = Gauge('medbillguard_active_agents', 'Number of active agents', ['agent_type'])
+    analysis_count = Counter('medbillguard_analysis_total', 'Total medical bill analyses', ['verdict', 'agent_id'])
+    analysis_duration = Histogram('medbillguard_analysis_duration_seconds', 'Analysis duration', ['agent_id'])
+except ValueError as e:
+    # Metrics already registered, get existing instances
+    from prometheus_client import REGISTRY
+    
+    # Get existing metrics or create new ones
+    request_count = None
+    request_duration = None
+    active_agents = None
+    analysis_count = None
+    analysis_duration = None
+    
+    for collector in REGISTRY._collector_to_names.keys():
+        if hasattr(collector, '_name'):
+            if collector._name == 'medbillguard_requests_total':
+                request_count = collector
+            elif collector._name == 'medbillguard_request_duration_seconds':
+                request_duration = collector
+            elif collector._name == 'medbillguard_active_agents':
+                active_agents = collector
+            elif collector._name == 'medbillguard_analysis_total':
+                analysis_count = collector
+            elif collector._name == 'medbillguard_analysis_duration_seconds':
+                analysis_duration = collector
+    
+    logger.warning(f"Prometheus metrics already registered: {e}")
 
 # Global state
 app_state = {

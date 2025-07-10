@@ -11,8 +11,8 @@ from pydantic import BaseModel
 import structlog
 
 from security.oauth2_service import oauth2_service, oauth2_config
-from security.auth_middleware import auth_manager, User
-from database.models import get_db_session
+from security.auth_middleware import auth_manager, User, get_current_user
+from database.models import get_async_db
 
 logger = structlog.get_logger(__name__)
 
@@ -113,7 +113,7 @@ async def github_login(
 @oauth2_router.get("/google/callback")
 async def google_callback(
     request: Request,
-    db_session=Depends(get_db_session)
+    db_session=Depends(get_async_db)
 ):
     """Handle Google OAuth2 callback"""
     
@@ -173,7 +173,7 @@ async def google_callback(
 @oauth2_router.get("/github/callback")
 async def github_callback(
     request: Request,
-    db_session=Depends(get_db_session)
+    db_session=Depends(get_async_db)
 ):
     """Handle GitHub OAuth2 callback"""
     
@@ -234,7 +234,7 @@ async def github_callback(
 async def logout(
     request: Request,
     response: Response,
-    current_user: Optional[User] = Depends(auth_manager.get_current_user)
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Logout user"""
     
@@ -256,7 +256,7 @@ async def logout(
 
 @oauth2_router.get("/me")
 async def get_current_user_info(
-    current_user: User = Depends(auth_manager.get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Get current user information"""
     
