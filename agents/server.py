@@ -539,63 +539,144 @@ async def metrics_summary():
     )
 
 
-@app.get("/debug/app-state")
-async def debug_app_state():
-    """Debug endpoint to check app_state status."""
-    return {
-        "app_state_keys": list(app_state.keys()),
-        "router": {
-            "exists": "router" in app_state,
-            "value": str(app_state.get("router", "NOT_FOUND")),
-            "type": str(type(app_state.get("router", "NOT_FOUND"))),
-            "is_none": app_state.get("router") is None
-        },
-        "registry": {
-            "exists": "registry" in app_state,
-            "value": str(app_state.get("registry", "NOT_FOUND")),
-            "type": str(type(app_state.get("registry", "NOT_FOUND"))),
-            "is_none": app_state.get("registry") is None
-        },
-        "medical_agent": {
-            "exists": "medical_agent" in app_state,
-            "value": str(app_state.get("medical_agent", "NOT_FOUND")),
-            "type": str(type(app_state.get("medical_agent", "NOT_FOUND"))),
-            "is_none": app_state.get("medical_agent") is None
-        }
-    }
-
-
+# Debug endpoints
 @app.get("/debug/redis-keys")
 async def debug_redis_keys():
-    """Debug endpoint to check Redis keys."""
+    """Debug endpoint to check Redis keys and agent data."""
     try:
-        if not app_state["redis_manager"] or not app_state["redis_manager"].redis_client:
-            return {"error": "Redis not available"}
+        if not app_state.get("redis_manager"):
+            return {"error": "Redis manager not available"}
+        
+        redis_client = app_state["redis_manager"].redis_client
+        if not redis_client:
+            return {"error": "Redis client not connected"}
         
         # Get all keys
-        all_keys = await app_state["redis_manager"].redis_client.keys("*")
+        all_keys = await redis_client.keys("*")
+        all_keys = [key.decode() if isinstance(key, bytes) else key for key in all_keys]
         
         # Get agent registry keys specifically
-        agent_keys = await app_state["redis_manager"].redis_client.keys("agent_registry:*")
+        agent_keys = await redis_client.keys("agent_registry:*")
+        agent_keys = [key.decode() if isinstance(key, bytes) else key for key in agent_keys]
         
-        # Get values for agent keys
+        # Get agent data
         agent_data = {}
         for key in agent_keys:
             try:
-                value = await app_state["redis_manager"].redis_client.get(key)
+                value = await redis_client.get(key)
                 if value:
-                    agent_data[key.decode()] = value.decode()
+                    agent_data[key] = value.decode() if isinstance(value, bytes) else value
             except Exception as e:
-                agent_data[key.decode()] = f"Error: {str(e)}"
+                agent_data[key] = f"Error: {str(e)}"
         
         return {
             "total_keys": len(all_keys),
-            "all_keys": [k.decode() for k in all_keys],
-            "agent_registry_keys": [k.decode() for k in agent_keys],
+            "all_keys": all_keys,
+            "agent_registry_keys": agent_keys,
             "agent_data": agent_data
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Debug failed: {str(e)}"}
+
+
+@app.get("/debug/agent-cache")
+async def debug_agent_cache():
+    """Debug endpoint to check agent registry cache."""
+    try:
+        if not app_state.get("registry"):
+            return {"error": "Agent registry not available"}
+        
+        registry = app_state["registry"]
+        
+        # Force cache refresh
+        await registry._refresh_cache()
+        
+        # Get cache contents
+        cache_data = {}
+        for agent_id, registration in registry._agent_cache.items():
+            cache_data[agent_id] = {
+                "agent_id": registration.agent_id,
+                "name": registration.name,
+                "status": registration.status.value,
+                "capabilities": {
+                    "supported_tasks": [task.value for task in registration.capabilities.supported_tasks],
+                    "preferred_model_hints": [hint.value for hint in registration.capabilities.preferred_model_hints]
+                },
+                "last_heartbeat": registration.last_heartbeat.isoformat(),
+                "registration_time": registration.registration_time.isoformat()
+            }
+        
+        return {
+            "cache_size": len(registry._agent_cache),
+            "cache_last_update": registry._cache_last_update,
+            "cache_data": cache_data
+        }
+    except Exception as e:
+        return {"error": f"Cache debug failed: {str(e)}"}
+
+
+@app.get("/debug/discover-test")
+async def debug_discover_test():
+    """Debug endpoint to test agent discovery."""
+    try:
+        if not app_state.get("registry"):
+            return {"error": "Agent registry not available"}
+        
+        registry = app_state["registry"]
+        
+        # Test discovery
+        from agents.agent_registry import TaskCapability
+        from agents.base_agent import ModelHint
+        
+        required_capabilities = [TaskCapability.DOCUMENT_PROCESSING, TaskCapability.RATE_VALIDATION]
+        
+        discovered_agents = await registry.discover_agents(
+            required_capabilities=required_capabilities,
+            model_hint=ModelHint.STANDARD,
+            max_agents=5
+        )
+        
+        agents_info = []
+        for agent in discovered_agents:
+            agents_info.append({
+                "agent_id": agent.agent_id,
+                "name": agent.name,
+                "status": agent.status.value,
+                "capabilities": [task.value for task in agent.capabilities.supported_tasks],
+                "model_hints": [hint.value for hint in agent.capabilities.preferred_model_hints]
+            })
+        
+        return {
+            "required_capabilities": [cap.value for cap in required_capabilities],
+            "discovered_count": len(discovered_agents),
+            "agents": agents_info
+        }
+    except Exception as e:
+        return {"error": f"Discovery test failed: {str(e)}"}
+
+
+@app.get("/debug/app-state")
+async def debug_app_state():
+    """Debug endpoint to check application state."""
+    try:
+        state_info = {}
+        for key, value in app_state.items():
+            if value is None:
+                state_info[key] = "None"
+            else:
+                state_info[key] = {
+                    "type": type(value).__name__,
+                    "available": True
+                }
+        
+        return {
+            "app_state": state_info,
+            "redis_connected": app_state.get("redis_manager") is not None,
+            "registry_available": app_state.get("registry") is not None,
+            "router_available": app_state.get("router") is not None
+        }
+    except Exception as e:
+        return {"error": f"App state debug failed: {str(e)}"}
 
 
 @app.get("/debug/test-simple")
