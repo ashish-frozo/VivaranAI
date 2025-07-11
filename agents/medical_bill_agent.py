@@ -47,6 +47,9 @@ class MedicalBillAgent(BaseAgent):
     ):
         """Initialize the medical bill agent with all analysis tools."""
         
+        # Store OpenAI API key for AI fallback analysis
+        self.openai_api_key = openai_api_key
+        
         # Initialize all analysis tools
         self.document_processor_tool = DocumentProcessorTool()
         self.rate_validator_tool = RateValidatorTool(reference_data_loader=reference_data_loader)
