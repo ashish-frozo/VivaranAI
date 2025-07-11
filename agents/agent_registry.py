@@ -147,10 +147,10 @@ class AgentRegistry:
         self.redis_url = redis_url
         self.state_manager = RedisStateManager(redis_url)
         
-        # Registry configuration
-        self.HEARTBEAT_INTERVAL = 30  # seconds
-        self.HEARTBEAT_TIMEOUT = 90   # seconds
-        self.CLEANUP_INTERVAL = 60    # seconds
+        # Constants
+        self.HEARTBEAT_TIMEOUT = 300  # 5 minutes - increased from 120 seconds for Railway stability
+        self.HEARTBEAT_INTERVAL = 60  # 1 minute
+        self.CLEANUP_INTERVAL = 300  # 5 minutes
         
         # In-memory cache for faster lookups
         self._agent_cache: Dict[str, AgentRegistration] = {}
@@ -342,64 +342,63 @@ class AgentRegistry:
         model_hint: ModelHint = ModelHint.STANDARD,
         max_agents: int = 5
     ) -> List[AgentRegistration]:
-        """
-        Discover agents that match required capabilities.
-        
-        Args:
-            required_capabilities: List of required task capabilities
-            model_hint: Preferred model hint
-            max_agents: Maximum number of agents to return
+        """Discover agents that can handle the required capabilities."""
+        try:
+            # Refresh cache first
+            await self._refresh_cache_if_needed()
             
-        Returns:
-            List of matching agent registrations, sorted by suitability
-        """
-        with tracer.start_as_current_span("agent_registry.discover_agents") as span:
-            span.set_attribute("required_capabilities", len(required_capabilities))
-            span.set_attribute("model_hint", model_hint.value)
-            span.set_attribute("max_agents", max_agents)
+            suitable_agents = []
             
-            try:
-                # Refresh cache if needed
-                await self._refresh_cache_if_needed()
-                
-                # Filter agents by capabilities
-                matching_agents = []
-                for registration in self._agent_cache.values():
-                    if self._agent_matches_requirements(
-                        registration, required_capabilities, model_hint
-                    ):
-                        matching_agents.append(registration)
-                
-                # Sort by suitability score
-                matching_agents.sort(
-                    key=lambda agent: self._calculate_suitability_score(
-                        agent, required_capabilities, model_hint
-                    ),
-                    reverse=True
-                )
-                
-                # Limit results
-                result = matching_agents[:max_agents]
-                
-                span.set_attribute("agents_found", len(result))
-                
+            logger.info(
+                "Starting agent discovery",
+                required_capabilities=[cap.value for cap in required_capabilities],
+                model_hint=model_hint.value,
+                cached_agents=len(self._agent_cache)
+            )
+            
+            for agent_id, registration in self._agent_cache.items():
                 logger.info(
-                    "Agent discovery completed",
-                    required_capabilities=[cap.value for cap in required_capabilities],
-                    agents_found=len(result),
-                    agent_ids=[agent.agent_id for agent in result]
+                    "Evaluating agent",
+                    agent_id=agent_id,
+                    status=registration.status.value,
+                    capabilities=[cap.value for cap in registration.capabilities.supported_tasks],
+                    model_hints=[hint.value for hint in registration.capabilities.preferred_model_hints]
                 )
                 
-                return result
-                
-            except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                logger.error(
-                    "Agent discovery failed",
-                    error=str(e),
-                    exc_info=True
-                )
-                return []
+                if self._agent_matches_requirements(registration, required_capabilities, model_hint):
+                    score = self._calculate_suitability_score(registration, required_capabilities, model_hint)
+                    suitable_agents.append((registration, score))
+                    logger.info(
+                        "Agent matches requirements",
+                        agent_id=agent_id,
+                        score=score
+                    )
+                else:
+                    logger.info(
+                        "Agent does not match requirements",
+                        agent_id=agent_id,
+                        status=registration.status.value,
+                        reason="status_check" if registration.status not in [AgentStatus.ONLINE, AgentStatus.DEGRADED] else "other"
+                    )
+            
+            # Sort by suitability score (descending)
+            suitable_agents.sort(key=lambda x: x[1], reverse=True)
+            
+            # Return top agents
+            result = [agent for agent, _ in suitable_agents[:max_agents]]
+            
+            logger.info(
+                "Agent discovery completed",
+                required_capabilities=[cap.value for cap in required_capabilities],
+                agents_found=len(result),
+                agent_ids=[agent.agent_id for agent in result]
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error("Agent discovery failed", error=str(e), exc_info=True)
+            return []
     
     async def get_agent_status(self, agent_id: str) -> Optional[AgentRegistration]:
         """Get current status of a specific agent."""
