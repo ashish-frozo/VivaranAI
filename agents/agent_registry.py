@@ -473,8 +473,8 @@ class AgentRegistry:
         model_hint: ModelHint
     ) -> bool:
         """Check if agent matches requirements."""
-        # Must be online
-        if registration.status != AgentStatus.ONLINE:
+        # Must be online or degraded (degraded agents can still process requests)
+        if registration.status not in [AgentStatus.ONLINE, AgentStatus.DEGRADED]:
             return False
         
         # Must support all required capabilities
