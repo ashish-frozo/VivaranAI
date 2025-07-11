@@ -141,19 +141,15 @@ class MedicalBillAgent(BaseAgent):
                 processing_stats = doc_result.get("processing_stats", {})
                 
                 if not line_items:
-                    return {
-                        "success": True,
-                        "analysis_complete": True,
-                        "doc_id": doc_id,
-                        "verdict": "ok",
-                        "message": "No billable items found in the document",
-                        "document_processing": doc_result,
-                        "total_bill_amount": 0.0,
-                        "total_overcharge": 0.0,
-                        "confidence_score": 0.95,
-                        "red_flags": [],
-                        "recommendations": ["Document contains no billable items for analysis"]
-                    }
+                    # Use AI fallback analysis when regex extraction fails
+                    logger.info("No line items extracted via regex, using AI fallback analysis", doc_id=doc_id)
+                    ai_result = await self._ai_fallback_analysis(
+                        raw_text=doc_result.get("raw_text", ""),
+                        doc_id=doc_id,
+                        state_code=state_code,
+                        insurance_type=insurance_type
+                    )
+                    return ai_result
                 
                 # Step 2: Rate Validation
                 logger.info("Step 2: Validating rates", doc_id=doc_id, items_count=len(line_items))
@@ -319,6 +315,147 @@ class MedicalBillAgent(BaseAgent):
         # Process the task
         return await self.process_task(context, task_data)
     
+    async def _ai_fallback_analysis(
+        self, 
+        raw_text: str, 
+        doc_id: str, 
+        state_code: Optional[str] = None,
+        insurance_type: str = "cghs"
+    ) -> Dict[str, Any]:
+        """
+        AI-powered fallback analysis when regex extraction fails.
+        Uses OpenAI to analyze raw OCR text and extract meaningful insights.
+        """
+        try:
+            logger.info("Starting AI fallback analysis", doc_id=doc_id, text_length=len(raw_text))
+            
+            # Create OpenAI client
+            import openai
+            client = openai.AsyncOpenAI(api_key=self.openai_api_key)
+            
+            # AI prompt for medical bill analysis
+            prompt = f"""
+            You are a medical bill analysis expert. Analyze this OCR-extracted text from a medical bill and provide a detailed analysis.
+
+            OCR Text:
+            {raw_text[:2000]}  # Limit to first 2000 chars to avoid token limits
+
+            Please analyze and extract:
+            1. Line items (services, procedures, medicines) with amounts
+            2. Total bill amount
+            3. Potential overcharges (compare with typical CGHS/ESI rates)
+            4. Suspicious items or duplicate charges
+            5. Overall assessment of the bill
+
+            Return a JSON response with this structure:
+            {{
+                "line_items": [
+                    {{
+                        "description": "Service/item name",
+                        "amount": 0.0,
+                        "quantity": 1,
+                        "is_suspicious": false,
+                        "reason": "Why suspicious if applicable"
+                    }}
+                ],
+                "total_bill_amount": 0.0,
+                "estimated_overcharge": 0.0,
+                "red_flags": [
+                    {{
+                        "type": "overcharge/duplicate/prohibited",
+                        "description": "Issue description", 
+                        "item": "Item name",
+                        "overcharge_amount": 0.0,
+                        "severity": "warning/critical"
+                    }}
+                ],
+                "verdict": "ok/warning/critical",
+                "confidence": 0.0,
+                "analysis_notes": "Detailed explanation of findings",
+                "recommendations": ["List of recommendations"]
+            }}
+
+            State: {state_code or "Not specified"}
+            Insurance Type: {insurance_type}
+            """
+
+            response = await client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.3
+            )
+
+            # Parse AI response
+            import json
+            ai_analysis = json.loads(response.choices[0].message.content)
+            
+            # Convert to our standard format
+            result = {
+                "success": True,
+                "analysis_complete": True,
+                "doc_id": doc_id,
+                "verdict": ai_analysis.get("verdict", "warning"),
+                "total_bill_amount": float(ai_analysis.get("total_bill_amount", 0.0)),
+                "total_overcharge": float(ai_analysis.get("estimated_overcharge", 0.0)),
+                "confidence_score": float(ai_analysis.get("confidence", 0.7)),
+                "red_flags": ai_analysis.get("red_flags", []),
+                "recommendations": ai_analysis.get("recommendations", []),
+                "message": "Analysis completed using AI fallback (regex extraction failed)",
+                "analysis_method": "ai_fallback",
+                "ai_analysis_notes": ai_analysis.get("analysis_notes", ""),
+                "line_items_ai": ai_analysis.get("line_items", []),
+                "document_processing": {
+                    "raw_text": raw_text,
+                    "extraction_method": "ai_analysis",
+                    "line_items_found": len(ai_analysis.get("line_items", [])),
+                    "success": True
+                },
+                "overcharge_percentage": (
+                    (float(ai_analysis.get("estimated_overcharge", 0.0)) / 
+                     float(ai_analysis.get("total_bill_amount", 1.0)) * 100) 
+                    if float(ai_analysis.get("total_bill_amount", 0.0)) > 0 else 0
+                )
+            }
+            
+            logger.info(
+                "AI fallback analysis completed",
+                doc_id=doc_id,
+                verdict=result["verdict"],
+                total_amount=result["total_bill_amount"],
+                overcharge=result["total_overcharge"],
+                confidence=result["confidence_score"],
+                red_flags=len(result["red_flags"])
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"AI fallback analysis failed: {str(e)}", doc_id=doc_id, exc_info=True)
+            
+            # Return a proper error result instead of hardcoded values
+            return {
+                "success": True,
+                "analysis_complete": True,
+                "doc_id": doc_id,
+                "verdict": "warning",
+                "message": f"Analysis failed: {str(e)}",
+                "total_bill_amount": 0.0,
+                "total_overcharge": 0.0,
+                "confidence_score": 0.5,
+                "red_flags": [{
+                    "type": "analysis_error",
+                    "description": "Could not complete analysis due to technical issues",
+                    "severity": "warning"
+                }],
+                "recommendations": [
+                    "Manual review recommended due to analysis error",
+                    "Please check the document quality and try again"
+                ],
+                "analysis_method": "error_fallback",
+                "error": str(e)
+            }
+
     async def health_check(self) -> Dict[str, Any]:
         """Extended health check including tool status."""
         base_health = await super().health_check()
