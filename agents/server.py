@@ -767,6 +767,41 @@ async def test_simple():
     return {"status": "working", "message": "Server is responding"}
 
 
+@app.get("/debug/test-openai")
+async def test_openai():
+    """Test OpenAI API connection."""
+    try:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return {"status": "error", "message": "OpenAI API key not found in environment"}
+        
+        # Test OpenAI API call
+        import openai
+        client = openai.AsyncOpenAI(api_key=openai_api_key)
+        
+        response = await client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Say 'Hello' if you can read this."}],
+            max_tokens=10,
+            temperature=0.3
+        )
+        
+        return {
+            "status": "success",
+            "message": "OpenAI API is working",
+            "response": response.choices[0].message.content,
+            "api_key_length": len(openai_api_key),
+            "api_key_prefix": openai_api_key[:7] + "..." if len(openai_api_key) > 7 else "too_short"
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"OpenAI API test failed: {str(e)}",
+            "api_key_configured": openai_api_key is not None,
+            "api_key_length": len(openai_api_key) if openai_api_key else 0
+        }
+
+
 @app.get("/debug/tesseract-info")
 async def tesseract_diagnostic():
     """Diagnostic endpoint to check Tesseract OCR availability."""
