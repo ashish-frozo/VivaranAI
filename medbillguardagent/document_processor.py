@@ -773,6 +773,21 @@ class DocumentProcessor:
         if not images:
             raise OCRError("No images provided for OCR processing")
         
+        # First, let's check if Tesseract is available
+        try:
+            tesseract_version = pytesseract.get_tesseract_version()
+            logger.info(f"Tesseract version: {tesseract_version}")
+        except Exception as e:
+            logger.error(f"Tesseract not available: {e}")
+            raise OCRError(f"Tesseract OCR engine not available: {e}")
+        
+        # Check available languages
+        try:
+            available_langs = pytesseract.get_languages()
+            logger.info(f"Available Tesseract languages: {available_langs}")
+        except Exception as e:
+            logger.warning(f"Could not check available languages: {e}")
+        
         # Language mapping for Tesseract
         lang_map = {
             Language.ENGLISH: 'eng',
@@ -782,6 +797,20 @@ class DocumentProcessor:
         }
         
         tesseract_lang = lang_map.get(language, 'eng')
+        
+        # Check if requested language is available
+        try:
+            available_langs = pytesseract.get_languages()
+            if tesseract_lang not in available_langs:
+                logger.warning(f"Language '{tesseract_lang}' not available. Available: {available_langs}")
+                if 'eng' in available_langs:
+                    tesseract_lang = 'eng'
+                    logger.info("Falling back to English")
+                else:
+                    raise OCRError(f"No suitable language pack available. Available: {available_langs}")
+        except Exception as e:
+            logger.warning(f"Could not verify language availability: {e}")
+            # Continue with requested language
         
         # OCR configuration optimized for medical documents with multiple PSM modes
         ocr_configs = [
@@ -804,20 +833,27 @@ class DocumentProcessor:
                     failed_pages += 1
                     continue
                 
+                # Log image details for debugging
+                logger.info(f"Page {i+1}: Processing image {image.size} pixels, mode: {image.mode}")
+                
                 # Preprocess image for better OCR
                 try:
                     processed_image = self._preprocess_image(image)
+                    logger.debug(f"Page {i+1}: Image preprocessed successfully")
                 except Exception as e:
                     logger.error(f"Page {i+1}: image preprocessing failed: {e}")
-                    failed_pages += 1
-                    continue
+                    # Try with original image
+                    processed_image = image
                 
                 # Try multiple OCR configurations and pick the best result
                 best_data = None
                 best_avg_conf = 0
+                config_errors = []
                 
                 for config_idx, config in enumerate(ocr_configs):
                     try:
+                        logger.debug(f"Page {i+1}: Trying OCR config {config_idx+1}: {config}")
+                        
                         data = pytesseract.image_to_data(
                             processed_image,
                             lang=tesseract_lang,
@@ -829,22 +865,28 @@ class DocumentProcessor:
                         confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
                         avg_conf = sum(confidences) / len(confidences) if confidences else 0
                         
-                        logger.debug(f"Page {i+1}, Config {config_idx+1}: avg confidence {avg_conf:.1f}")
+                        logger.debug(f"Page {i+1}, Config {config_idx+1}: avg confidence {avg_conf:.1f}% ({len(confidences)} words)")
                         
                         if avg_conf > best_avg_conf:
                             best_avg_conf = avg_conf
                             best_data = data
                             
                     except pytesseract.TesseractError as e:
-                        logger.debug(f"Page {i+1}, Config {config_idx+1}: Tesseract failed: {e}")
+                        error_msg = f"Page {i+1}, Config {config_idx+1}: Tesseract failed: {e}"
+                        logger.debug(error_msg)
+                        config_errors.append(error_msg)
                         continue
                     except Exception as e:
-                        logger.debug(f"Page {i+1}, Config {config_idx+1}: OCR failed: {e}")
+                        error_msg = f"Page {i+1}, Config {config_idx+1}: OCR failed: {e}"
+                        logger.debug(error_msg)
+                        config_errors.append(error_msg)
                         continue
                 
                 # Use the best OCR result
                 if best_data is None:
                     logger.error(f"Page {i+1}: All OCR configurations failed")
+                    for error in config_errors:
+                        logger.error(error)
                     failed_pages += 1
                     continue
                 

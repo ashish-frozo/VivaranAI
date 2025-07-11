@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Tesseract OCR and OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -13,7 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libglib2.0-0 \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-hin \
+    tesseract-ocr-ben \
+    tesseract-ocr-tam \
+    libpoppler-cpp-dev \
+    libopencv-dev \
+    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install dependencies

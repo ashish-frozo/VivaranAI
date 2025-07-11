@@ -685,6 +685,97 @@ async def test_simple():
     return {"status": "working", "message": "Server is responding"}
 
 
+@app.get("/debug/tesseract-info")
+async def tesseract_diagnostic():
+    """Diagnostic endpoint to check Tesseract OCR availability."""
+    try:
+        import pytesseract
+        from PIL import Image
+        
+        # Check Tesseract version
+        try:
+            version = pytesseract.get_tesseract_version()
+            version_str = str(version)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Tesseract not available: {e}",
+                "timestamp": time.time()
+            }
+        
+        # Check available languages
+        try:
+            languages = pytesseract.get_languages()
+        except Exception as e:
+            languages = f"Error getting languages: {e}"
+        
+        # Create a simple test image with text
+        try:
+            # Create a simple test image
+            test_image = Image.new('RGB', (300, 100), color='white')
+            
+            # Try to draw some text (we'll use a simple approach)
+            from PIL import ImageDraw, ImageFont
+            
+            draw = ImageDraw.Draw(test_image)
+            try:
+                # Try to use default font
+                font = ImageFont.load_default()
+                draw.text((10, 30), "TEST OCR 123", fill='black', font=font)
+            except Exception:
+                # Fallback: draw without font
+                draw.text((10, 30), "TEST OCR 123", fill='black')
+            
+            # Test OCR on this simple image
+            try:
+                ocr_result = pytesseract.image_to_string(test_image).strip()
+                ocr_success = len(ocr_result) > 0
+                ocr_confidence = None
+                
+                # Try to get confidence data
+                try:
+                    data = pytesseract.image_to_data(test_image, output_type=pytesseract.Output.DICT)
+                    confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
+                    ocr_confidence = sum(confidences) / len(confidences) if confidences else 0
+                except Exception as conf_e:
+                    ocr_confidence = f"Error getting confidence: {conf_e}"
+                
+            except Exception as ocr_e:
+                ocr_result = f"OCR failed: {ocr_e}"
+                ocr_success = False
+                ocr_confidence = None
+                
+        except Exception as img_e:
+            ocr_result = f"Image creation failed: {img_e}"
+            ocr_success = False
+            ocr_confidence = None
+        
+        return {
+            "success": True,
+            "tesseract_version": version_str,
+            "available_languages": languages,
+            "ocr_test": {
+                "success": ocr_success,
+                "result": ocr_result,
+                "confidence": ocr_confidence
+            },
+            "timestamp": time.time()
+        }
+        
+    except ImportError as e:
+        return {
+            "success": False,
+            "error": f"Required modules not available: {e}",
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Unexpected error: {e}",
+            "timestamp": time.time()
+        }
+
+
 # Analysis endpoints
 @app.post("/analyze-fallback", response_model=AnalysisResponse)
 async def analyze_fallback(request: AnalysisRequest, background_tasks: BackgroundTasks):

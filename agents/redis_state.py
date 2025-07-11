@@ -85,7 +85,7 @@ class RedisStateManager:
     - file_hash:{sha256} -> File content hash cache
     """
     
-    def __init__(self, redis_url: str = "redis://localhost:6379/1"):
+    def __init__(self, redis_url: str = "redis://localhost:6379"):
         self.redis_url = redis_url
         self.redis_client: Optional[redis.Redis] = None
         
