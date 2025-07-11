@@ -789,19 +789,79 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             # Route the request
             decision = await app_state["router"].route_request(routing_request)
             
-            # Convert routing decision to analysis response
-            result = AnalysisResponse(
-                success=True,
-                doc_id=request.doc_id,
-                analysis_complete=True,
-                verdict=decision.selected_agents[0].agent_id if decision.selected_agents else "unknown",
-                total_bill_amount=0.0,  # Will be filled by the selected agent
-                total_overcharge=0.0,   # Will be filled by the selected agent
-                confidence_score=decision.confidence,
-                red_flags=[],           # Will be filled by the selected agent
-                recommendations=[],      # Will be filled by the selected agent
-                processing_time_seconds=time.time() - start_time
-            )
+            # Actually execute the selected agent
+            if decision.selected_agents:
+                selected_agent_id = decision.selected_agents[0].agent_id
+                logger.info(f"Executing selected agent: {selected_agent_id}")
+                
+                # Get the agent from the registry
+                if selected_agent_id == "medical_bill_agent" and app_state.get("medical_agent"):
+                    # Decode base64 file content
+                    import base64
+                    file_content = base64.b64decode(request.file_content)
+                    
+                    # Execute the medical bill agent
+                    agent_result = await app_state["medical_agent"].analyze_medical_bill(
+                        file_content=file_content,
+                        doc_id=request.doc_id,
+                        user_id=request.user_id,
+                        language=request.language,
+                        state_code=request.state_code,
+                        insurance_type=request.insurance_type,
+                        file_format=request.file_format
+                    )
+                    
+                    # Convert agent result to analysis response
+                    result = AnalysisResponse(
+                        success=agent_result.get("success", False),
+                        doc_id=request.doc_id,
+                        analysis_complete=agent_result.get("analysis_complete", False),
+                        verdict=agent_result.get("verdict", "unknown"),
+                        total_bill_amount=agent_result.get("total_bill_amount", 0.0),
+                        total_overcharge=agent_result.get("total_overcharge", 0.0),
+                        confidence_score=agent_result.get("confidence_score", 0.0),
+                        red_flags=agent_result.get("red_flags", []),
+                        recommendations=agent_result.get("recommendations", []),
+                        processing_time_seconds=time.time() - start_time
+                    )
+                    
+                    # Add OCR text and analysis to the response metadata
+                    if hasattr(result, '__dict__'):
+                        result.__dict__['ocr_text'] = agent_result.get("document_processing", {}).get("raw_text", "")
+                        result.__dict__['analysis'] = agent_result.get("confidence_analysis", {})
+                        result.__dict__['document_processing'] = agent_result.get("document_processing", {})
+                        result.__dict__['rate_validation'] = agent_result.get("rate_validation", {})
+                        result.__dict__['duplicate_detection'] = agent_result.get("duplicate_detection", {})
+                        result.__dict__['prohibited_detection'] = agent_result.get("prohibited_detection", {})
+                        result.__dict__['analysis_summary'] = agent_result.get("analysis_summary", {})
+                else:
+                    # Fallback if agent not found
+                    result = AnalysisResponse(
+                        success=False,
+                        doc_id=request.doc_id,
+                        analysis_complete=False,
+                        verdict="error",
+                        total_bill_amount=0.0,
+                        total_overcharge=0.0,
+                        confidence_score=0.0,
+                        red_flags=[],
+                        recommendations=[f"Selected agent {selected_agent_id} not available"],
+                        processing_time_seconds=time.time() - start_time
+                    )
+            else:
+                # No agents found
+                result = AnalysisResponse(
+                    success=False,
+                    doc_id=request.doc_id,
+                    analysis_complete=False,
+                    verdict="error",
+                    total_bill_amount=0.0,
+                    total_overcharge=0.0,
+                    confidence_score=0.0,
+                    red_flags=[],
+                    recommendations=["No suitable agents found for analysis"],
+                    processing_time_seconds=time.time() - start_time
+                )
             
             # Update metrics
             if analysis_count:
