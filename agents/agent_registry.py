@@ -147,10 +147,11 @@ class AgentRegistry:
         self.redis_url = redis_url
         self.state_manager = RedisStateManager(redis_url)
         
-        # Constants
-        self.HEARTBEAT_TIMEOUT = 300  # 5 minutes - increased from 120 seconds for Railway stability
-        self.HEARTBEAT_INTERVAL = 60  # 1 minute
-        self.CLEANUP_INTERVAL = 300  # 5 minutes
+        # Constants - Railway-optimized for longer sleep periods
+        self.HEARTBEAT_TIMEOUT = 600  # 10 minutes - increased for Railway cold starts
+        self.HEARTBEAT_INTERVAL = 120  # 2 minutes - reduced frequency for Railway
+        self.CLEANUP_INTERVAL = 600  # 10 minutes - longer cleanup interval
+        self.REGISTRATION_TTL = 1800  # 30 minutes - longer TTL for Railway
         
         # In-memory cache for faster lookups
         self._agent_cache: Dict[str, AgentRegistration] = {}
@@ -248,7 +249,7 @@ class AgentRegistry:
                     
                 await self.state_manager.redis_client.setex(
                     key,
-                    self.HEARTBEAT_TIMEOUT * 2,  # Double timeout as TTL
+                    self.REGISTRATION_TTL,  # Use longer TTL for Railway
                     registration.to_redis_value()
                 )
                 
@@ -584,7 +585,7 @@ class AgentRegistry:
                 if self.state_manager.redis_client:
                     await self.state_manager.redis_client.setex(
                         key,
-                        self.HEARTBEAT_TIMEOUT * 2,
+                        self.REGISTRATION_TTL,
                         registration.to_redis_value()
                     )
                 

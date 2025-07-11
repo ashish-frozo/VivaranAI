@@ -102,6 +102,73 @@ except Exception as e:
     analysis_count = None
     analysis_duration = None
 
+# Add this helper function after the imports and before the app_state definition
+async def ensure_agent_registration():
+    """Ensure all agents are properly registered. Called on startup and health checks."""
+    try:
+        if not app_state["registry"] or not app_state["medical_agent"]:
+            logger.warning("Registry or medical agent not available for registration")
+            return False
+        
+        # Check if medical agent is registered
+        agent_status = await app_state["registry"].get_agent_status(app_state["medical_agent"].agent_id)
+        
+        if not agent_status or agent_status.status.value not in ["online", "degraded"]:
+            logger.info("Medical agent not registered or offline, registering now")
+            
+            # Create capabilities for medical agent
+            capabilities = AgentCapabilities(
+                supported_tasks=[
+                    TaskCapability.DOCUMENT_PROCESSING,
+                    TaskCapability.RATE_VALIDATION,
+                    TaskCapability.DUPLICATE_DETECTION,
+                    TaskCapability.PROHIBITED_DETECTION,
+                    TaskCapability.CONFIDENCE_SCORING
+                ],
+                max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
+                preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
+                processing_time_ms_avg=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
+                cost_per_request_rupees=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
+                confidence_threshold=0.85,
+                supported_document_types=["pdf", "jpg", "png", "jpeg"],
+                supported_languages=["english", "hindi"]
+            )
+            
+            # Register the agent
+            registration_success = await app_state["registry"].register_agent(
+                agent=app_state["medical_agent"],
+                capabilities=capabilities
+            )
+            
+            if registration_success:
+                logger.info("Medical agent successfully registered", agent_id=app_state["medical_agent"].agent_id)
+                return True
+            else:
+                logger.error("Failed to register medical agent")
+                return False
+        else:
+            logger.debug("Medical agent already registered", status=agent_status.status.value)
+            return True
+            
+    except Exception as e:
+        logger.error("Error during agent registration", error=str(e), exc_info=True)
+        return False
+
+async def start_background_registration_monitor():
+    """Background task to monitor and re-register agents periodically."""
+    while not app_state["shutdown_event"].is_set():
+        try:
+            await asyncio.sleep(120)  # Check every 2 minutes
+            
+            if app_state["registry"] and app_state["medical_agent"]:
+                await ensure_agent_registration()
+                
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Background registration monitor error", error=str(e))
+            await asyncio.sleep(60)  # Wait 1 minute before retrying
+
 # Global state
 app_state = {
     "registry": None,
@@ -188,33 +255,41 @@ async def lifespan(app: FastAPI):
     app_state["medical_agent"] = None
     app_state["shutdown_event"] = asyncio.Event()
     
-    # Initialize Redis Manager
-    try:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        app_state["redis_manager"] = RedisStateManager(redis_url)
-        await app_state["redis_manager"].connect()
-        logger.info("Redis connected successfully")
-    except Exception as e:
-        logger.warning(f"Redis connection failed, continuing without Redis: {e}")
-        app_state["redis_manager"] = None
+    # Initialize Redis Manager with retry logic
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    for attempt in range(3):
+        try:
+            app_state["redis_manager"] = RedisStateManager(redis_url)
+            await app_state["redis_manager"].connect()
+            logger.info("Redis connected successfully", attempt=attempt + 1)
+            break
+        except Exception as e:
+            logger.warning(f"Redis connection attempt {attempt + 1} failed: {e}")
+            if attempt < 2:
+                await asyncio.sleep(5)  # Wait 5 seconds before retry
+            else:
+                logger.error("All Redis connection attempts failed, continuing without Redis")
+                app_state["redis_manager"] = None
     
-    # Initialize Agent Registry
-    try:
-        if app_state["redis_manager"]:
-            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-            app_state["registry"] = AgentRegistry(redis_url=redis_url)
-            await app_state["registry"].start()
-            logger.info("Agent registry initialized")
-        else:
-            logger.warning("Skipping agent registry initialization - Redis not available")
-    except Exception as e:
-        logger.warning(f"Failed to initialize agent registry: {e}")
-        app_state["registry"] = None
+    # Initialize Agent Registry with retry logic
+    if app_state["redis_manager"]:
+        for attempt in range(3):
+            try:
+                app_state["registry"] = AgentRegistry(redis_url=redis_url)
+                await app_state["registry"].start()
+                logger.info("Agent registry initialized successfully", attempt=attempt + 1)
+                break
+            except Exception as e:
+                logger.warning(f"Agent registry initialization attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(5)  # Wait 5 seconds before retry
+                else:
+                    logger.error("All agent registry initialization attempts failed")
+                    app_state["registry"] = None
     
     # Initialize Router Agent
     try:
         if app_state["registry"]:
-            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
             app_state["router"] = RouterAgent(
                 registry=app_state["registry"],
                 redis_url=redis_url
@@ -229,7 +304,6 @@ async def lifespan(app: FastAPI):
     # Initialize Enhanced Router Agent
     try:
         if app_state["registry"]:
-            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
             openai_api_key = os.getenv("OPENAI_API_KEY")
             app_state["enhanced_router"] = EnhancedRouterAgent(
                 registry=app_state["registry"],
@@ -249,59 +323,51 @@ async def lifespan(app: FastAPI):
         logger.info("OAuth2 manager initialized")
     except Exception as e:
         logger.warning(f"OAuth2 manager initialization failed: {e}")
-        # Continue without OAuth2 - basic analysis will work
     
-    # Initialize Medical Bill Agent
-    try:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        
-        if openai_api_key:
-            app_state["medical_agent"] = MedicalBillAgent(
-                redis_url=redis_url,
-                openai_api_key=openai_api_key
-            )
-            
-            # Register medical bill agent with capabilities
-            if app_state["registry"]:
-                capabilities = AgentCapabilities(
-                    supported_tasks=[
-                        TaskCapability.DOCUMENT_PROCESSING,
-                        TaskCapability.RATE_VALIDATION,
-                        TaskCapability.DUPLICATE_DETECTION,
-                        TaskCapability.PROHIBITED_DETECTION,
-                        TaskCapability.CONFIDENCE_SCORING
-                    ],
-                    max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
-                    preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
-                    processing_time_ms_avg=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
-                    cost_per_request_rupees=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
-                    confidence_threshold=0.85,
-                    supported_document_types=["pdf", "jpg", "png", "jpeg"],
-                    supported_languages=["english", "hindi"]
+    # Initialize Medical Bill Agent with retry logic
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if openai_api_key:
+        for attempt in range(3):
+            try:
+                app_state["medical_agent"] = MedicalBillAgent(
+                    redis_url=redis_url,
+                    openai_api_key=openai_api_key
                 )
-                
-                registration_success = await app_state["registry"].register_agent(
-                    agent=app_state["medical_agent"],
-                    capabilities=capabilities
-                )
-                
-                if registration_success:
-                    logger.info("Medical bill agent registered", agent_id=app_state["medical_agent"].agent_id)
+                logger.info("Medical bill agent initialized successfully", attempt=attempt + 1)
+                break
+            except Exception as e:
+                logger.warning(f"Medical agent initialization attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(5)  # Wait 5 seconds before retry
                 else:
-                    logger.warning("Failed to register medical bill agent")
-            else:
-                logger.warning("Registry not available - medical bill agent created but not registered")
+                    logger.error("All medical agent initialization attempts failed")
+                    app_state["medical_agent"] = None
+    else:
+        logger.warning("OpenAI API key not found, medical agent not created")
+    
+    # Ensure agent registration with multiple attempts
+    if app_state["registry"] and app_state["medical_agent"]:
+        for attempt in range(5):  # Try up to 5 times
+            try:
+                registration_success = await ensure_agent_registration()
+                if registration_success:
+                    logger.info("Agent registration successful", attempt=attempt + 1)
+                    break
+                else:
+                    logger.warning(f"Agent registration attempt {attempt + 1} failed")
+            except Exception as e:
+                logger.error(f"Agent registration attempt {attempt + 1} error: {e}")
+                
+            if attempt < 4:
+                await asyncio.sleep(10)  # Wait 10 seconds before retry
         else:
-            logger.warning("OpenAI API key not found, medical agent not created")
-    except Exception as e:
-        logger.warning(f"Medical agent initialization failed: {e}")
-        app_state["medical_agent"] = None
+            logger.error("All agent registration attempts failed - agents may not be available")
     
     # Start background tasks
     try:
         asyncio.create_task(update_metrics_background())
-        logger.info("Background tasks started")
+        asyncio.create_task(start_background_registration_monitor())
+        logger.info("Background tasks started successfully")
     except Exception as e:
         logger.warning(f"Background tasks failed to start: {e}")
     
@@ -436,9 +502,20 @@ async def health_check():
         if app_state["registry"]:
             online_agents = await app_state["registry"].list_online_agents()
             components["registry"] = "healthy"
+            
+            # Check if medical agent is registered, if not try to register it
+            if app_state["medical_agent"]:
+                medical_agent_online = any(
+                    a.agent_id == app_state["medical_agent"].agent_id 
+                    for a in online_agents
+                )
+                if not medical_agent_online:
+                    logger.warning("Medical agent not found in online agents, attempting re-registration")
+                    await ensure_agent_registration()
         else:
             components["registry"] = "unhealthy"
-    except Exception:
+    except Exception as e:
+        logger.error("Registry health check failed", error=str(e))
         components["registry"] = "unhealthy"
     
     try:
@@ -481,7 +558,7 @@ async def readiness_probe():
         if app_state["redis_manager"]:
             await app_state["redis_manager"].ping()
         
-        # Check if medical agent is registered
+        # Check if medical agent is registered, if not try to register it
         if app_state["registry"] and app_state["medical_agent"]:
             online_agents = await app_state["registry"].list_online_agents()
             medical_agent_online = any(
@@ -490,7 +567,12 @@ async def readiness_probe():
             )
             
             if not medical_agent_online:
-                logger.warning("Medical agent not registered, but service is still ready")
+                logger.warning("Medical agent not registered, attempting re-registration")
+                registration_success = await ensure_agent_registration()
+                if registration_success:
+                    logger.info("Medical agent successfully re-registered during readiness check")
+                else:
+                    logger.error("Failed to re-register medical agent during readiness check")
         
         return {"status": "ready", "timestamp": time.time(), "mode": "full"}
         

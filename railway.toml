@@ -2,11 +2,11 @@
 dockerfilePath = "Dockerfile.railway"
 
 [deploy]
-startCommand = "python railway_server.py"
-healthcheckPath = "/health"
+startCommand = "python railway_startup.py"
+healthcheckPath = "/health/readiness"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
 
 [environments.production]
 [environments.production.variables]
@@ -19,6 +19,14 @@ MAX_WORKERS = "4"
 TIMEOUT_SECONDS = "30"
 API_RATE_LIMIT = "100"
 FORCE_HTTPS = "true"
+# Agent registration settings for Railway
+MAX_CONCURRENT_REQUESTS = "10"
+ESTIMATED_RESPONSE_TIME_MS = "15000"
+ESTIMATED_COST_PER_REQUEST = "0.50"
+# Railway-specific health check settings
+HEALTH_CHECK_INTERVAL = "30"
+AGENT_REGISTRATION_RETRY_COUNT = "5"
+AGENT_REGISTRATION_RETRY_DELAY = "10"
 
 [environments.staging]
 [environments.staging.variables]
