@@ -1,18 +1,24 @@
 """
-Tests for the confidence scoring engine.
+Unit tests for ConfidenceScorer class.
+
+Tests cover:
+- Confidence scoring algorithms
+- Risk assessment logic
+- OpenAI integration
+- Error handling
 """
 
 import pytest
+from unittest.mock import Mock, patch, AsyncMock
 from decimal import Decimal
-from unittest.mock import Mock
 
-from medbillguardagent.confidence_scorer import (
+from shared.tools.confidence_scorer import (
     ConfidenceScorer,
-    ConfidenceScore,
-    ConfidenceWeights,
-    ConfidenceSource
+    ConfidenceError,
+    LineItemAnalysis,
+    ConfidenceScoreResult
 )
-from medbillguardagent.schemas import RedFlag, Verdict, LineItemType
+from shared.schemas.schemas import RedFlag, Verdict, LineItemType
 
 
 class TestConfidenceScorer:

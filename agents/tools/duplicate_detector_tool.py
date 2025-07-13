@@ -2,7 +2,7 @@
 Duplicate Detector Tool - Async wrapper for DuplicateDetector.
 
 This tool wraps the existing DuplicateDetector component to make it compatible
-with the OpenAI Agent SDK framework for detecting duplicate medical services.
+with the OpenAI Agent SDK framework for duplicate detection in medical bills.
 """
 
 import asyncio
@@ -10,7 +10,7 @@ import structlog
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
-from medbillguardagent.duplicate_detector import DuplicateDetector
+from shared.tools.duplicate_detector import DuplicateDetector
 
 logger = structlog.get_logger(__name__)
 

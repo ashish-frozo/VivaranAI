@@ -1,5 +1,11 @@
 """
-Test cases for the prohibited item detection module.
+Unit tests for ProhibitedDetector class.
+
+Tests cover:
+- Prohibited item detection
+- Reference data loading
+- Fuzzy matching algorithms
+- Error handling
 """
 
 import json
@@ -14,7 +20,7 @@ from medbillguardagent.prohibited_detector import (
     ProhibitedItem, 
     ProhibitedMatch
 )
-from medbillguardagent.schemas import LineItemType, RedFlag
+from shared.schemas.schemas import LineItemType, RedFlag
 
 
 @pytest.fixture

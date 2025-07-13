@@ -1,18 +1,22 @@
 """
-MedBillGuardAgent - AI-powered medical bill analysis service.
+MedBillGuard Agent - Advanced Medical Bill Analysis System
 
-This FastAPI service analyzes medical bills to detect overcharges, duplicates,
-and prohibited items by comparing against CGHS, ESI, NPPA, and state tariffs.
+This module provides comprehensive analysis of medical bills including:
+- OCR text extraction and document processing
+- Rate validation against government schemes (CGHS, ESI, NPPA)
+- Duplicate detection and overcharge identification
+- Prohibited item detection and compliance checking
+- Confidence scoring and risk assessment
 """
 
 import asyncio
 import logging
-import time
-from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional
-import uuid
+import os
+import tempfile
+from decimal import Decimal
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-from http import HTTPStatus
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,21 +24,23 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, Response
 import structlog
 
-from medbillguardagent.schemas import (
-    MedBillGuardRequest,
-    MedBillGuardResponse,
-    ErrorResponse,
-    ProcessingStats,
+from shared.schemas.schemas import (
+    MedBillGuardResponse, 
+    LineItem, 
+    RedFlag, 
+    Verdict, 
+    LineItemType, 
+    DocumentType, 
     Language
 )
-from medbillguardagent.document_processor import DocumentProcessor, process_document
+from shared.processors.document_processor import DocumentProcessor, process_document
+from shared.tools.confidence_scorer import ConfidenceScorer
+from shared.utils.cache_manager import cache_manager
+from shared.tools.duplicate_detector import DuplicateDetector
 from medbillguardagent.rate_validator import RateValidator
-from medbillguardagent.confidence_scorer import ConfidenceScorer
-from medbillguardagent.reference_data_loader import ReferenceDataLoader
-from medbillguardagent.cache_manager import cache_manager
-from medbillguardagent.duplicate_detector import DuplicateDetector
 from medbillguardagent.prohibited_detector import ProhibitedDetector
-from medbillguardagent.explanation_builder import build_explanation
+from medbillguardagent.reference_data_loader import ReferenceDataLoader
+from medbillguardagent.explanation_builder import ExplanationBuilder
 
 # Configure structured logging
 structlog.configure(

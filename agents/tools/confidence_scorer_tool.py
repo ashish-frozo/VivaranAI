@@ -2,15 +2,15 @@
 Confidence Scorer Tool - Async wrapper for ConfidenceScorer.
 
 This tool wraps the existing ConfidenceScorer component to make it compatible
-with the OpenAI Agent SDK framework for confidence scoring and analysis.
+with the OpenAI Agent SDK framework for medical bill analysis.
 """
 
 import asyncio
 import structlog
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 
-from medbillguardagent.confidence_scorer import ConfidenceScorer
+from shared.tools.confidence_scorer import ConfidenceScorer
 
 logger = structlog.get_logger(__name__)
 

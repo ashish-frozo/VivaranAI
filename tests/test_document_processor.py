@@ -1,34 +1,37 @@
 """
-Unit tests for DocumentProcessor module.
+Unit tests for DocumentProcessor class.
 
-Tests cover:
-- Document processing pipeline
-- OCR text extraction
-- Line item parsing
-- Table extraction (Camelot and regex)
-- File format validation and size limits
-- Document type detection
+This module contains comprehensive tests for the DocumentProcessor including:
+- File format validation and detection
+- OCR text extraction from images and PDFs
+- Table extraction using Camelot and regex
+- Line item extraction and validation
+- Document type classification
 - Error handling and edge cases
 """
 
-import asyncio
-import io
-from decimal import Decimal
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
 import pytest
-from PIL import Image
-import tempfile
 import os
+import tempfile
+from decimal import Decimal
+from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock
+from PIL import Image
+import numpy as np
 
-from medbillguardagent.document_processor import (
+from shared.processors.document_processor import (
     DocumentProcessor,
-    ExtractedDocument,
+    DocumentProcessingError,
+    FileValidationError,
+    OCRError,
+    TableExtractionError,
     ExtractedLineItem,
     ExtractedTable,
+    ExtractedDocument,
     ProcessingStats,
-    process_document,
+    process_document
 )
-from medbillguardagent.schemas import DocumentType, Language, LineItemType
+from shared.schemas.schemas import DocumentType, Language, LineItemType
 
 
 class TestDocumentProcessor:

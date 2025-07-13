@@ -1,23 +1,28 @@
 """
-Performance tests for MedBillGuardAgent.
+Performance tests for MedBillGuard Agent.
 
-Tests critical path operations to ensure they meet performance requirements.
+Tests cover:
+- Processing speed benchmarks
+- Memory usage analysis
+- Concurrent processing
+- Load testing scenarios
 """
 
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-import sys
+import time
+import psutil
 import os
+from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 
-# Add libs to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'libs'))
-from testing import timed_test, benchmark_test
-
+from shared.processors.document_processor import DocumentProcessor
+from shared.tools.confidence_scorer import ConfidenceScorer
+from shared.utils.cache_manager import CacheManager
+from shared.schemas.schemas import LineItem, LineItemType
 from medbillguardagent.rate_validator import RateValidator
-from medbillguardagent.confidence_scorer import ConfidenceScorer
-from medbillguardagent.cache_manager import CacheManager
-from medbillguardagent.schemas import LineItem, LineItemType
+from medbillguardagent.prohibited_detector import ProhibitedDetector
+from medbillguardagent.reference_data_loader import ReferenceDataLoader
 
 
 class TestPerformance:
@@ -142,7 +147,8 @@ class TestPerformance:
     def test_json_serialization_performance(self):
         """Test that JSON serialization of large responses is fast."""
         import json
-        from medbillguardagent.schemas import MedBillGuardResponse, RedFlag
+        # Test with medical bill analysis response
+        from shared.schemas.schemas import MedBillGuardResponse, RedFlag
         
         # Create a large response with many red flags
         red_flags = []

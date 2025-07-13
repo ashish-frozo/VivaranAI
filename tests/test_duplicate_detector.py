@@ -1,16 +1,24 @@
 """
-Test cases for the duplicate detection module.
+Unit tests for DuplicateDetector class.
+
+Tests cover:
+- Duplicate detection algorithms
+- Similar service matching
+- Fuzzy matching logic
+- Time-based grouping
 """
 
 import pytest
 from decimal import Decimal
+from unittest.mock import Mock
 
-from medbillguardagent.duplicate_detector import (
-    DuplicateDetector, 
-    DuplicateGroup, 
-    DuplicateItem
+from shared.tools.duplicate_detector import (
+    DuplicateDetector,
+    DuplicateGroup,
+    DuplicateScore,
+    DuplicateReason
 )
-from medbillguardagent.schemas import LineItemType, RedFlag
+from shared.schemas.schemas import LineItemType, RedFlag
 
 
 @pytest.fixture

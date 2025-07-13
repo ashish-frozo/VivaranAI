@@ -287,7 +287,7 @@ tests/
 ```python
 import pytest
 from unittest.mock import Mock, patch
-from medbillguardagent.document_processor import DocumentProcessor
+from shared.processors.document_processor import DocumentProcessor
 
 class TestDocumentProcessor:
     """Test suite for DocumentProcessor."""

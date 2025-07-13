@@ -1,21 +1,23 @@
 """
-Test cases for the cache manager module.
+Unit tests for CacheManager class.
+
+Tests cover:
+- Cache operations (get, set, delete)
+- TTL expiration
+- Cache invalidation
+- Thread safety
 """
 
-import asyncio
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+import asyncio
+from unittest.mock import AsyncMock, Mock, patch
 from datetime import datetime, timedelta
 
-from medbillguardagent.cache_manager import (
+from shared.utils.cache_manager import (
     CacheManager,
-    CacheConfig,
-    CacheStats,
-    cache_manager,
-    cached_reference_data,
-    cached_validation,
-    cached_fuzzy_match,
-    cached_llm_response
+    CacheItem,
+    CacheError,
+    cache_manager
 )
 
 
