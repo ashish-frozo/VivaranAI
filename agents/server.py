@@ -190,6 +190,46 @@ async def get_medical_agent():
     
     return app_state["medical_agent"]
 
+async def ensure_agent_is_available(agent_id: str = "medical_bill_agent"):
+    """Ensure specific agent is available, creating it if needed."""
+    if agent_id == "medical_bill_agent":
+        # First try to get from registry
+        if app_state.get("registry"):
+            try:
+                agent_status = await app_state["registry"].get_agent_status(agent_id)
+                if agent_status and agent_status.status.value == "online":
+                    return True
+            except Exception as e:
+                logger.warning(f"Registry check failed for {agent_id}: {e}")
+        
+        # Create/recreate agent if not available
+        if not app_state.get("medical_agent"):
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            if openai_api_key:
+                try:
+                    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+                    app_state["medical_agent"] = MedicalBillAgent(
+                        redis_url=redis_url,
+                        openai_api_key=openai_api_key
+                    )
+                    logger.info("Medical agent created/recreated for reliability")
+                except Exception as e:
+                    logger.error(f"Failed to create medical agent: {e}")
+                    return False
+        
+        # Try to register with registry (best effort)
+        if app_state.get("registry") and app_state.get("medical_agent"):
+            try:
+                await ensure_agent_registration()
+                logger.info("Agent re-registered successfully")
+            except Exception as e:
+                logger.warning(f"Agent registration failed but agent still available: {e}")
+        
+        return True
+    
+    # Future: Add other agent types
+    return False
+
 # Global state
 app_state = {
     "registry": None,
@@ -792,14 +832,23 @@ async def test_simple():
 async def test_agent_availability():
     """Test endpoint to verify medical agent is always available."""
     try:
-        medical_agent = await get_medical_agent()
-        health_result = await medical_agent.health_check()
-        return {
-            "status": "success",
-            "message": "Medical agent is available",
-            "agent_id": medical_agent.agent_id,
-            "health": health_result
-        }
+        agent_available = await ensure_agent_is_available("medical_bill_agent")
+        
+        if agent_available and app_state.get("medical_agent"):
+            medical_agent = app_state["medical_agent"]
+            health_result = await medical_agent.health_check()
+            return {
+                "status": "success",
+                "message": "Medical agent is available",
+                "agent_id": medical_agent.agent_id,
+                "health": health_result,
+                "registry_status": "registered" if app_state.get("registry") else "no_registry"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Medical agent not available"
+            }
     except Exception as e:
         return {
             "status": "error",
@@ -1042,22 +1091,27 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
                 selected_agent_id = decision.selected_agents[0].agent_id
                 logger.info(f"Executing selected agent: {selected_agent_id}")
                 
-                # Get the agent from the registry
-                if selected_agent_id == "medical_bill_agent" and app_state.get("medical_agent"):
-                    # Decode base64 file content
-                    import base64
-                    file_content = base64.b64decode(request.file_content)
+                # Ensure agent is available before execution
+                if selected_agent_id == "medical_bill_agent":
+                    agent_available = await ensure_agent_is_available(selected_agent_id)
                     
-                    # Execute the medical bill agent
-                    agent_result = await app_state["medical_agent"].analyze_medical_bill(
-                        file_content=file_content,
-                        doc_id=request.doc_id,
-                        user_id=request.user_id,
-                        language=request.language,
-                        state_code=request.state_code,
-                        insurance_type=request.insurance_type,
-                        file_format=request.file_format
-                    )
+                    if agent_available and app_state.get("medical_agent"):
+                        # Decode base64 file content
+                        import base64
+                        file_content = base64.b64decode(request.file_content)
+                        
+                        # Execute the medical bill agent
+                        agent_result = await app_state["medical_agent"].analyze_medical_bill(
+                            file_content=file_content,
+                            doc_id=request.doc_id,
+                            user_id=request.user_id,
+                            language=request.language,
+                            state_code=request.state_code,
+                            insurance_type=request.insurance_type,
+                            file_format=request.file_format
+                        )
+                    else:
+                        raise HTTPException(status_code=503, detail="Medical agent not available")
                     
                     # Convert agent result to analysis response
                     result = AnalysisResponse(
@@ -1128,12 +1182,17 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             
             return result
             
-        # Fallback: Use medical agent directly (always available)
+        # Fallback: Use medical agent directly with robust availability check
         else:
             logger.info("Using medical agent directly for analysis")
             
-            # Get or create medical agent (always available)
-            medical_agent = await get_medical_agent()
+            # Ensure agent is available
+            agent_available = await ensure_agent_is_available("medical_bill_agent")
+            
+            if not agent_available or not app_state.get("medical_agent"):
+                raise HTTPException(status_code=503, detail="Medical agent not available")
+            
+            medical_agent = app_state["medical_agent"]
             
             # Create agent context with correct parameters
             agent_context = AgentContext(
