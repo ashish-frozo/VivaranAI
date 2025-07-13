@@ -144,7 +144,20 @@ class DocumentProcessor:
         self.supported_formats = supported_formats or ['pdf', 'jpg', 'jpeg', 'png']
         self.max_file_size = max_file_size
         self.confidence_threshold = confidence_threshold
+        # Add camera-specific thresholds
+        self.camera_confidence_threshold = 25  # Lower threshold for camera images
+        self.scanned_confidence_threshold = 60  # Higher threshold for scanned docs
         self.enable_camelot = enable_camelot
+        
+        # Initialize language support
+        self.language_support = {
+            Language.ENGLISH: 'eng',
+            Language.HINDI: 'hin',
+            Language.BENGALI: 'ben',
+            Language.TAMIL: 'tam'
+        }
+        
+        logger.info(f"DocumentProcessor initialized with formats: {self.supported_formats}, max_size: {self.max_file_size}MB, confidence_threshold: {self.confidence_threshold}%")
         
         # Validate supported formats
         for fmt in self.supported_formats:
@@ -836,14 +849,27 @@ class DocumentProcessor:
                 # Log image details for debugging
                 logger.info(f"Page {i+1}: Processing image {image.size} pixels, mode: {image.mode}")
                 
+                # Detect image type and get appropriate confidence threshold
+                image_type = self._detect_image_type(image)
+                dynamic_threshold = self._get_dynamic_confidence_threshold(image)
+                logger.info(f"Page {i+1}: Image type detected as '{image_type}', using confidence threshold: {dynamic_threshold}%")
+                
                 # Preprocess image for better OCR
                 try:
-                    processed_image = self._preprocess_image(image)
-                    logger.debug(f"Page {i+1}: Image preprocessed successfully")
+                    if image_type == 'camera':
+                        # Use camera-specific preprocessing
+                        processed_image = self._preprocess_camera_image(image)
+                        logger.debug(f"Page {i+1}: Applied camera-specific preprocessing")
+                    else:
+                        # Use standard preprocessing for scanned documents
+                        processed_image = self._preprocess_image(image)
+                        logger.debug(f"Page {i+1}: Applied standard preprocessing")
                 except Exception as e:
                     logger.error(f"Page {i+1}: image preprocessing failed: {e}")
                     # Try with original image
                     processed_image = image
+                    # Fall back to original confidence threshold
+                    dynamic_threshold = self.confidence_threshold
                 
                 # Try multiple OCR configurations and pick the best result
                 best_data = None
@@ -893,7 +919,7 @@ class DocumentProcessor:
                 data = best_data
                 logger.debug(f"Page {i+1}: Using best config with {best_avg_conf:.1f}% confidence")
                 
-                # Filter out low-confidence words
+                # Filter out low-confidence words using dynamic threshold
                 page_text = []
                 page_confidence = []
                 
@@ -902,7 +928,8 @@ class DocumentProcessor:
                         text = data['text'][j].strip()
                         conf = int(data['conf'][j])
                         
-                        if text and conf > self.confidence_threshold:
+                        # Use dynamic confidence threshold instead of fixed threshold
+                        if text and conf > dynamic_threshold:
                             page_text.append(text)
                             page_confidence.append(conf)
                 except (KeyError, ValueError, IndexError) as e:
@@ -915,11 +942,37 @@ class DocumentProcessor:
                     total_confidence += sum(page_confidence)
                     total_words += len(page_confidence)
                     
-                    logger.debug(f"Page {i+1}: extracted {len(page_text)} words with avg confidence {sum(page_confidence)/len(page_confidence):.1f}")
+                    logger.info(f"Page {i+1}: extracted {len(page_text)} words with avg confidence {sum(page_confidence)/len(page_confidence):.1f}% (threshold: {dynamic_threshold}%)")
                 else:
-                    logger.warning(f"Page {i+1}: no text extracted above confidence threshold ({self.confidence_threshold})")
-                    failed_pages += 1
+                    logger.warning(f"Page {i+1}: no text extracted above confidence threshold ({dynamic_threshold}%)")
                     
+                    # For camera images, try with even lower threshold as fallback
+                    if image_type == 'camera' and dynamic_threshold > 15:
+                        logger.info(f"Page {i+1}: Trying emergency fallback with 15% threshold for camera image")
+                        fallback_text = []
+                        fallback_confidence = []
+                        
+                        try:
+                            for j in range(len(data['text'])):
+                                text = data['text'][j].strip()
+                                conf = int(data['conf'][j])
+                                
+                                if text and conf > 15:  # Emergency threshold
+                                    fallback_text.append(text)
+                                    fallback_confidence.append(conf)
+                        except (KeyError, ValueError, IndexError):
+                            pass
+                        
+                        if fallback_text:
+                            all_text.append(' '.join(fallback_text))
+                            total_confidence += sum(fallback_confidence)
+                            total_words += len(fallback_confidence)
+                            logger.info(f"Page {i+1}: emergency fallback extracted {len(fallback_text)} words with avg confidence {sum(fallback_confidence)/len(fallback_confidence):.1f}%")
+                        else:
+                            failed_pages += 1
+                    else:
+                        failed_pages += 1
+            
             except Exception as e:
                 logger.error(f"Page {i+1}: unexpected OCR error: {e}")
                 failed_pages += 1
@@ -2233,6 +2286,136 @@ class DocumentProcessor:
             error_msg = f"Unexpected error processing document {doc_id}: {str(e)}"
             logger.error(error_msg)
             raise DocumentProcessingError(error_msg) from e
+
+    def _detect_image_type(self, image: Image.Image) -> str:
+        """
+        Detect if image is camera-captured or scanned based on characteristics.
+        
+        Args:
+            image: PIL Image to analyze
+            
+        Returns:
+            'camera' or 'scanned'
+        """
+        width, height = image.size
+        
+        # Camera images typically have:
+        # - Higher resolution (usually > 2000px)
+        # - Aspect ratios close to camera ratios (4:3, 16:9, etc.)
+        # - More noise and compression artifacts
+        
+        # Scanned documents typically have:
+        # - Lower resolution (usually < 1500px)
+        # - Standard document ratios (A4: ~1.414, Letter: ~1.294)
+        # - Clean, uniform backgrounds
+        
+        aspect_ratio = width / height
+        total_pixels = width * height
+        
+        # High resolution suggests camera
+        if total_pixels > 4_000_000:  # > 4MP
+            return 'camera'
+        
+        # Very low resolution suggests scan
+        if total_pixels < 1_000_000:  # < 1MP
+            return 'scanned'
+        
+        # Check aspect ratios
+        camera_ratios = [4/3, 16/9, 3/2, 1.85, 2.35]  # Common camera ratios
+        document_ratios = [1.414, 1.294]  # A4, Letter
+        
+        # Find closest ratio
+        min_camera_diff = min(abs(aspect_ratio - ratio) for ratio in camera_ratios)
+        min_doc_diff = min(abs(aspect_ratio - ratio) for ratio in document_ratios)
+        
+        # If much closer to camera ratio, likely camera
+        if min_camera_diff < 0.1 and min_camera_diff < min_doc_diff - 0.1:
+            return 'camera'
+        
+        # If much closer to document ratio, likely scanned
+        if min_doc_diff < 0.1 and min_doc_diff < min_camera_diff - 0.1:
+            return 'scanned'
+        
+        # Default: use resolution as tie-breaker
+        return 'camera' if total_pixels > 2_000_000 else 'scanned'
+
+    def _get_dynamic_confidence_threshold(self, image: Image.Image) -> float:
+        """
+        Get appropriate confidence threshold based on image type.
+        
+        Args:
+            image: PIL Image to analyze
+            
+        Returns:
+            Confidence threshold (0-100)
+        """
+        image_type = self._detect_image_type(image)
+        
+        if image_type == 'camera':
+            # Camera images need lower threshold
+            threshold = self.camera_confidence_threshold
+            logger.debug(f"Camera image detected, using threshold: {threshold}%")
+        else:
+            # Scanned documents can use higher threshold
+            threshold = self.scanned_confidence_threshold
+            logger.debug(f"Scanned document detected, using threshold: {threshold}%")
+        
+        return threshold
+
+    def _preprocess_camera_image(self, image: Image.Image) -> Image.Image:
+        """
+        Special preprocessing for camera-captured images.
+        
+        Args:
+            image: Input PIL Image
+            
+        Returns:
+            Preprocessed PIL Image optimized for camera images
+        """
+        # Convert PIL to OpenCV format
+        opencv_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Camera-specific preprocessing pipeline
+        try:
+            # 1. Resize if too large (improves processing speed)
+            height, width = opencv_img.shape[:2]
+            if width > 2000 or height > 2000:
+                scale = min(2000 / width, 2000 / height)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                opencv_img = cv2.resize(opencv_img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                logger.debug(f"Resized camera image from {width}x{height} to {new_width}x{new_height}")
+            
+            # 2. Convert to grayscale
+            gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
+            
+            # 3. Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            gray = clahe.apply(gray)
+            
+            # 4. Denoise using Non-local Means Denoising
+            gray = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+            
+            # 5. Apply bilateral filter to smooth while preserving edges
+            gray = cv2.bilateralFilter(gray, 9, 75, 75)
+            
+            # 6. Apply adaptive thresholding
+            binary = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+            
+            # 7. Apply morphological operations to clean up
+            kernel = np.ones((1, 1), np.uint8)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+            
+            # Convert back to PIL
+            return Image.fromarray(binary)
+            
+        except Exception as e:
+            logger.error(f"Camera preprocessing failed: {e}")
+            # Return original image if preprocessing fails
+            return image
 
 
 # Convenience function for external use
