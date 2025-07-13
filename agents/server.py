@@ -992,7 +992,27 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             result.__dict__['document_type'] = routing_decision.document_type
             result.__dict__['agent_type'] = routing_decision.agent_type
             result.__dict__['routing_confidence'] = routing_decision.confidence
-            result.__dict__['ocr_text'] = agent_result.get("document_processing", {}).get("raw_text", "")
+            
+            # OCR text from various sources
+            ocr_text = (agent_result.get("document_processing", {}).get("raw_text", "") or 
+                       agent_result.get("debug_data", {}).get("ocrText", "") or
+                       agent_result.get("raw_text", ""))
+            
+            result.__dict__['ocr_text'] = ocr_text
+            result.__dict__['raw_text'] = ocr_text  # Frontend also looks for this field
+            result.__dict__['rawText'] = ocr_text   # Alternative field name
+            
+            # Include debug data for frontend
+            result.__dict__['debug_data'] = agent_result.get("debug_data", {
+                "ocrText": ocr_text,
+                "processingStats": agent_result.get("document_processing", {}).get("processing_stats", {}),
+                "extractedLineItems": agent_result.get("document_processing", {}).get("line_items", []),
+                "aiAnalysis": agent_result.get("ai_analysis_notes", ""),
+                "analysisMethod": agent_result.get("analysis_method", "standard"),
+                "documentType": routing_decision.document_type,
+                "extractionMethod": "document_processor"
+            })
+            
             result.__dict__['analysis'] = agent_result.get("confidence_analysis", {})
             result.__dict__['document_processing'] = agent_result.get("document_processing", {})
             result.__dict__['rate_validation'] = agent_result.get("rate_validation", {})
