@@ -969,7 +969,53 @@ class DocumentProcessor:
                             total_words += len(fallback_confidence)
                             logger.info(f"Page {i+1}: emergency fallback extracted {len(fallback_text)} words with avg confidence {sum(fallback_confidence)/len(fallback_confidence):.1f}%")
                         else:
-                            failed_pages += 1
+                            # Ultimate fallback: try different preprocessing strategies
+                            logger.info(f"Page {i+1}: Trying multiple preprocessing strategies for very difficult camera image")
+                            
+                            # Try aggressive preprocessing strategies
+                            strategies = [
+                                ("aggressive_contrast", self._preprocess_camera_image_aggressive),
+                                ("edge_preserving", self._preprocess_camera_image_edge_preserving),
+                                ("morphological", self._preprocess_camera_image_morphological)
+                            ]
+                            
+                            for strategy_name, strategy_func in strategies:
+                                try:
+                                    logger.debug(f"Page {i+1}: Trying {strategy_name} preprocessing strategy")
+                                    alt_processed = strategy_func(image)
+                                    
+                                    # Quick OCR test with this strategy
+                                    alt_data = pytesseract.image_to_data(
+                                        alt_processed,
+                                        lang=tesseract_lang,
+                                        config=r'--oem 3 --psm 6',
+                                        output_type=pytesseract.Output.DICT
+                                    )
+                                    
+                                    alt_text = []
+                                    alt_conf = []
+                                    
+                                    for j in range(len(alt_data['text'])):
+                                        text = alt_data['text'][j].strip()
+                                        conf = int(alt_data['conf'][j])
+                                        
+                                        if text and conf > 10:  # Very low threshold
+                                            alt_text.append(text)
+                                            alt_conf.append(conf)
+                                    
+                                    if alt_text and len(alt_text) > len(fallback_text):
+                                        logger.info(f"Page {i+1}: {strategy_name} strategy extracted {len(alt_text)} words with avg confidence {sum(alt_conf)/len(alt_conf):.1f}%")
+                                        all_text.append(' '.join(alt_text))
+                                        total_confidence += sum(alt_conf)
+                                        total_words += len(alt_conf)
+                                        break
+                                        
+                                except Exception as e:
+                                    logger.debug(f"Page {i+1}: {strategy_name} strategy failed: {e}")
+                                    continue
+                            else:
+                                failed_pages += 1
+                                logger.warning(f"Page {i+1}: All preprocessing strategies failed - image may be too poor quality")
                     else:
                         failed_pages += 1
             
@@ -2375,6 +2421,9 @@ class DocumentProcessor:
         # Convert PIL to OpenCV format
         opencv_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         
+        # Try multiple preprocessing strategies and return the best one
+        strategies = []
+        
         # Camera-specific preprocessing pipeline
         try:
             # 1. Resize if too large (improves processing speed)
@@ -2386,36 +2435,163 @@ class DocumentProcessor:
                 opencv_img = cv2.resize(opencv_img, (new_width, new_height), interpolation=cv2.INTER_AREA)
                 logger.debug(f"Resized camera image from {width}x{height} to {new_width}x{new_height}")
             
-            # 2. Convert to grayscale
+            # Strategy 1: Standard camera preprocessing
             gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
-            
-            # 3. Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             gray = clahe.apply(gray)
-            
-            # 4. Denoise using Non-local Means Denoising
             gray = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-            
-            # 5. Apply bilateral filter to smooth while preserving edges
             gray = cv2.bilateralFilter(gray, 9, 75, 75)
-            
-            # 6. Apply adaptive thresholding
             binary = cv2.adaptiveThreshold(
                 gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
             )
-            
-            # 7. Apply morphological operations to clean up
             kernel = np.ones((1, 1), np.uint8)
             binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
             binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+            strategies.append(("standard", binary))
             
-            # Convert back to PIL
-            return Image.fromarray(binary)
+            # Strategy 2: Aggressive contrast enhancement
+            gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
+            # Apply gamma correction to brighten dark images
+            gamma = 1.5
+            lookUpTable = np.empty((1, 256), np.uint8)
+            for i in range(256):
+                lookUpTable[0, i] = np.clip(pow(i / 255.0, gamma) * 255.0, 0, 255)
+            gray = cv2.LUT(gray, lookUpTable)
+            
+            # Strong CLAHE
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+            gray = clahe.apply(gray)
+            
+            # Aggressive denoising
+            gray = cv2.fastNlMeansDenoising(gray, None, 15, 7, 21)
+            
+            # Otsu's thresholding
+            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            strategies.append(("aggressive_contrast", binary))
+            
+            # Strategy 3: Edge-preserving smoothing
+            gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
+            
+            # Edge-preserving filter
+            filtered = cv2.edgePreservingFilter(opencv_img, flags=2, sigma_s=30, sigma_r=0.4)
+            gray = cv2.cvtColor(filtered, cv2.COLOR_BGR2GRAY)
+            
+            # Adaptive histogram equalization
+            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(6, 6))
+            gray = clahe.apply(gray)
+            
+            # Median blur to reduce noise
+            gray = cv2.medianBlur(gray, 3)
+            
+            # Adaptive thresholding with different parameters
+            binary = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, 4
+            )
+            strategies.append(("edge_preserving", binary))
+            
+            # Strategy 4: Morphological preprocessing
+            gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
+            
+            # Apply opening to remove noise
+            kernel = np.ones((2, 2), np.uint8)
+            gray = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel)
+            
+            # Apply closing to fill gaps
+            kernel = np.ones((3, 3), np.uint8)
+            gray = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+            
+            # Gaussian blur
+            gray = cv2.GaussianBlur(gray, (3, 3), 0)
+            
+            # Adaptive thresholding
+            binary = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 13, 3
+            )
+            strategies.append(("morphological", binary))
+            
+            # If we have multiple strategies, return the first one for now
+            # In a more sophisticated implementation, we could test each with a quick OCR
+            if strategies:
+                chosen_strategy, result = strategies[0]  # Use standard strategy by default
+                logger.debug(f"Using camera preprocessing strategy: {chosen_strategy}")
+                return Image.fromarray(result)
             
         except Exception as e:
-            logger.error(f"Camera preprocessing failed: {e}")
-            # Return original image if preprocessing fails
+            logger.error(f"All camera preprocessing strategies failed: {e}")
+            # Return original image if all preprocessing fails
             return image
+            
+        # Return original image if no strategies worked
+        return image
+
+    def _preprocess_camera_image_aggressive(self, image: Image.Image) -> Image.Image:
+        """Aggressive contrast enhancement for very dark/poor quality images."""
+        opencv_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
+        
+        # Gamma correction to brighten dark images
+        gamma = 1.8
+        lookUpTable = np.empty((1, 256), np.uint8)
+        for i in range(256):
+            lookUpTable[0, i] = np.clip(pow(i / 255.0, gamma) * 255.0, 0, 255)
+        gray = cv2.LUT(gray, lookUpTable)
+        
+        # Strong CLAHE
+        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))
+        gray = clahe.apply(gray)
+        
+        # Aggressive denoising
+        gray = cv2.fastNlMeansDenoising(gray, None, 20, 7, 21)
+        
+        # Otsu's thresholding
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        return Image.fromarray(binary)
+
+    def _preprocess_camera_image_edge_preserving(self, image: Image.Image) -> Image.Image:
+        """Edge-preserving smoothing for noisy images."""
+        opencv_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Edge-preserving filter
+        filtered = cv2.edgePreservingFilter(opencv_img, flags=2, sigma_s=50, sigma_r=0.4)
+        gray = cv2.cvtColor(filtered, cv2.COLOR_BGR2GRAY)
+        
+        # Adaptive histogram equalization
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(6, 6))
+        gray = clahe.apply(gray)
+        
+        # Median blur to reduce noise
+        gray = cv2.medianBlur(gray, 5)
+        
+        # Adaptive thresholding
+        binary = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, 4
+        )
+        
+        return Image.fromarray(binary)
+
+    def _preprocess_camera_image_morphological(self, image: Image.Image) -> Image.Image:
+        """Morphological operations for text cleanup."""
+        opencv_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2GRAY)
+        
+        # Apply opening to remove noise
+        kernel = np.ones((2, 2), np.uint8)
+        gray = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel)
+        
+        # Apply closing to fill gaps
+        kernel = np.ones((3, 3), np.uint8)
+        gray = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+        
+        # Gaussian blur
+        gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        
+        # Adaptive thresholding
+        binary = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 13, 3
+        )
+        
+        return Image.fromarray(binary)
 
 
 # Convenience function for external use
