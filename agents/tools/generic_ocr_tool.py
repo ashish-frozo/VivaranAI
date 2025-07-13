@@ -392,12 +392,12 @@ class GenericOCRTool:
         # Preprocess image for better OCR
         processed_image = self._preprocess_image(image)
         
-        # OCR configuration optimized for documents
+        # OCR configuration optimized for documents with PSM 11 → 6 chain
         ocr_configs = [
-            r'--oem 3 --psm 6',  # Uniform block of text
-            r'--oem 3 --psm 4',  # Single column of text
-            r'--oem 3 --psm 1',  # Automatic page segmentation with OSD
-            r'--oem 3 --psm 3'   # Fully automatic page segmentation
+            r'--oem 3 --psm 11',  # Sparse text detection (excellent for scattered text)
+            r'--oem 3 --psm 6',   # Uniform block of text (fallback for structured documents)
+            r'--oem 3 --psm 4',   # Single column of text
+            r'--oem 3 --psm 1'    # Automatic page segmentation with OSD
         ]
         
         best_text = ""

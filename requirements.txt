@@ -18,7 +18,7 @@ tiktoken==0.5.2
 
 # Medical bill processing dependencies
 pillow==10.1.0
-pytesseract==0.3.10
+pytesseract==0.3.13  # Supports Tesseract 5.5.1 with improved accuracy
 opencv-python-headless==4.8.1.78
 pypdf2==3.0.1
 python-multipart==0.0.6

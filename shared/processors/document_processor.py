@@ -502,12 +502,15 @@ class DocumentProcessor:
             # Convert PIL to OpenCV format
             opencv_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
             
+            # Apply Hough line deskewing first (for camera images)
+            deskewed_img = self._apply_hough_deskew(opencv_img)
+            
             # Apply multiple preprocessing strategies
             strategies = [
-                self._preprocess_strategy_1_basic(opencv_img),
-                self._preprocess_strategy_2_adaptive(opencv_img),
-                self._preprocess_strategy_3_morphological(opencv_img),
-                self._preprocess_strategy_4_denoising(opencv_img)
+                self._preprocess_strategy_1_basic(deskewed_img),
+                self._preprocess_strategy_2_adaptive(deskewed_img),
+                self._preprocess_strategy_3_morphological(deskewed_img),
+                self._preprocess_strategy_4_denoising(deskewed_img)
             ]
             
             # Test each strategy with a quick OCR check
@@ -562,6 +565,82 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Advanced preprocessing failed: {e}, falling back to basic preprocessing")
             return self._preprocess_basic_fallback(image)
+    
+    def _apply_hough_deskew(self, img: np.ndarray) -> np.ndarray:
+        """Apply Hough line transform to detect and correct document skew.
+        
+        Args:
+            img: Input OpenCV image (BGR format)
+            
+        Returns:
+            Deskewed OpenCV image
+        """
+        try:
+            # Convert to grayscale for edge detection
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # Apply Gaussian blur to reduce noise
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            
+            # Edge detection using Canny
+            edges = cv2.Canny(blurred, 50, 150, apertureSize=3)
+            
+            # Apply Hough line transform
+            lines = cv2.HoughLines(edges, 1, np.pi/180, threshold=100)
+            
+            if lines is not None and len(lines) > 0:
+                # Calculate angles of detected lines
+                angles = []
+                for line in lines:
+                    rho, theta = line[0]
+                    angle = theta * 180 / np.pi
+                    
+                    # Convert to angle relative to horizontal (0-180 range)
+                    if angle > 90:
+                        angle = angle - 180
+                    
+                    # Filter out nearly vertical lines (keep horizontal-ish lines)
+                    if abs(angle) < 45:  # Only consider lines within 45 degrees of horizontal
+                        angles.append(angle)
+                
+                if angles:
+                    # Calculate median angle to avoid outlier influence
+                    median_angle = np.median(angles)
+                    
+                    # Only apply correction if skew is significant (> 0.5 degrees)
+                    if abs(median_angle) > 0.5:
+                        logger.debug(f"Detected skew angle: {median_angle:.2f} degrees, applying correction")
+                        
+                        # Apply rotation to correct skew
+                        height, width = img.shape[:2]
+                        center = (width // 2, height // 2)
+                        
+                        # Create rotation matrix
+                        rotation_matrix = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+                        
+                        # Apply rotation with appropriate border handling
+                        deskewed = cv2.warpAffine(
+                            img, 
+                            rotation_matrix, 
+                            (width, height),
+                            flags=cv2.INTER_CUBIC,
+                            borderMode=cv2.BORDER_REPLICATE
+                        )
+                        
+                        return deskewed
+                    else:
+                        logger.debug(f"Skew angle {median_angle:.2f} degrees is minimal, no correction needed")
+                        return img
+                else:
+                    logger.debug("No suitable horizontal lines detected for skew correction")
+                    return img
+            else:
+                logger.debug("No lines detected by Hough transform")
+                return img
+                
+        except Exception as e:
+            logger.warning(f"Hough deskewing failed: {e}, using original image")
+            return img
     
     def _preprocess_strategy_1_basic(self, img: np.ndarray) -> np.ndarray:
         """Basic preprocessing strategy - contrast + denoising."""
@@ -825,12 +904,12 @@ class DocumentProcessor:
             logger.warning(f"Could not verify language availability: {e}")
             # Continue with requested language
         
-        # OCR configuration optimized for medical documents with multiple PSM modes
+        # OCR configuration optimized for medical documents with PSM 11 → 6 chain
         ocr_configs = [
-            r'--oem 3 --psm 6',  # Uniform block of text (good for medical bills)
-            r'--oem 3 --psm 4',  # Single column of text
-            r'--oem 3 --psm 1',  # Automatic page segmentation with OSD
-            r'--oem 3 --psm 3'   # Fully automatic page segmentation
+            r'--oem 3 --psm 11',  # Sparse text detection (excellent for scattered medical bill text)
+            r'--oem 3 --psm 6',   # Uniform block of text (fallback for structured documents)
+            r'--oem 3 --psm 4',   # Single column of text
+            r'--oem 3 --psm 1'    # Automatic page segmentation with OSD
         ]
         
         all_text = []

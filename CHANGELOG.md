@@ -5,6 +5,30 @@ All notable changes to VivaranAI MedBillGuardAgent will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-07-13 - OCR Engine Upgrades
+
+### Added
+- **Tesseract 5.5.1 Support**: Upgraded pytesseract to 0.3.13 for compatibility with Tesseract 5.5.1
+- **Hough Line Deskewing**: Automatic document skew correction using Hough line transform
+  - Detects document rotation using edge detection and line analysis
+  - Applies median angle correction for robust skew handling
+  - Graceful fallback if deskewing fails
+- **Optimized PSM Chain**: Updated OCR page segmentation modes prioritizing PSM 11 → 6
+  - PSM 11 (Sparse text detection) for scattered medical bill text
+  - PSM 6 (Uniform block) as structured document fallback
+  - Better handling of non-standard document layouts
+
+### Enhanced
+- **Document Preprocessing Pipeline**: Integrated Hough deskewing as first preprocessing step
+- **OCR Accuracy**: Improved text extraction for camera-captured and skewed documents
+- **Error Handling**: Robust fallback mechanisms for preprocessing failures
+
+### Technical Details
+- Hough line transform parameters: rho=1, theta=π/180, threshold=100
+- Skew correction applied for angles > 0.5 degrees
+- Horizontal line filtering (±45 degrees) for document orientation detection
+- Median angle calculation for outlier resistance
+
 ## [Unreleased]
 
 ### Added

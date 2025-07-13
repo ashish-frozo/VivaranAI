@@ -271,6 +271,108 @@
             </div>
         </div>
 
+        <!-- Debug Toggle Button -->
+        <div x-show="debugData" class="text-center mb-4">
+            <button @click="showDebugInfo = !showDebugInfo" 
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+                <i :class="showDebugInfo ? 'fas fa-eye-slash' : 'fas fa-eye'" class="mr-2"></i>
+                <span x-text="showDebugInfo ? 'Hide Debug Info' : 'Show Debug Info'"></span>
+            </button>
+        </div>
+
+        <!-- OCR Debug Section -->
+        <div x-show="debugData && showDebugInfo" class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-eye mr-2"></i>OCR Debug Information
+            </h2>
+            
+            <!-- Analysis Method Info -->
+            <div class="mb-4">
+                <div class="flex items-center gap-4 text-sm">
+                    <span class="font-medium text-gray-700">Analysis Method:</span>
+                    <span :class="{
+                        'bg-green-100 text-green-800': debugData?.analysisMethod === 'standard',
+                        'bg-blue-100 text-blue-800': debugData?.analysisMethod === 'ai_fallback',
+                        'bg-red-100 text-red-800': debugData?.analysisMethod === 'error_fallback'
+                    }" class="px-2 py-1 rounded text-xs font-medium" x-text="debugData?.analysisMethod || 'unknown'"></span>
+                    
+                    <span class="font-medium text-gray-700">Extraction:</span>
+                    <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-medium" x-text="debugData?.extractionMethod || 'unknown'"></span>
+                    
+                    <span class="font-medium text-gray-700">Document Type:</span>
+                    <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-medium" x-text="debugData?.documentType || 'unknown'"></span>
+                </div>
+            </div>
+
+            <!-- OCR Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4" x-show="debugData?.processingStats">
+                <div class="bg-blue-50 p-3 rounded-lg">
+                    <h3 class="text-sm font-medium text-blue-800 mb-1">OCR Confidence</h3>
+                    <p class="text-lg font-bold text-blue-900" x-text="debugData?.processingStats?.ocr_confidence ? (debugData.processingStats.ocr_confidence * 100).toFixed(1) + '%' : 'N/A'"></p>
+                </div>
+                <div class="bg-green-50 p-3 rounded-lg">
+                    <h3 class="text-sm font-medium text-green-800 mb-1">Characters Extracted</h3>
+                    <p class="text-lg font-bold text-green-900" x-text="debugData?.processingStats?.text_extracted_chars || 'N/A'"></p>
+                </div>
+                <div class="bg-purple-50 p-3 rounded-lg">
+                    <h3 class="text-sm font-medium text-purple-800 mb-1">Line Items Found</h3>
+                    <p class="text-lg font-bold text-purple-900" x-text="debugData?.processingStats?.line_items_found || 0"></p>
+                </div>
+                <div class="bg-orange-50 p-3 rounded-lg">
+                    <h3 class="text-sm font-medium text-orange-800 mb-1">Processing Time</h3>
+                    <p class="text-lg font-bold text-orange-900" x-text="debugData?.processingStats?.processing_time_ms ? debugData.processingStats.processing_time_ms + 'ms' : 'N/A'"></p>
+                </div>
+            </div>
+            
+            <!-- Raw OCR Text -->
+            <div class="mb-4">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">
+                    <i class="fas fa-file-text mr-2"></i>Raw OCR Text
+                </h3>
+                <div class="bg-gray-50 rounded-lg p-4 border max-h-60 overflow-y-auto">
+                    <pre class="text-sm text-gray-700 whitespace-pre-wrap font-mono" x-text="debugData?.ocrText || 'No OCR text extracted - OCR may have failed or confidence was too low'"></pre>
+                </div>
+            </div>
+            
+            <!-- Extracted Line Items -->
+            <div x-show="debugData?.extractedLineItems?.length > 0">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">
+                    <i class="fas fa-list mr-2"></i>Extracted Line Items (Regex)
+                </h3>
+                <div class="bg-gray-50 rounded-lg p-4 border max-h-40 overflow-y-auto">
+                    <template x-for="item in debugData?.extractedLineItems" :key="item.description">
+                        <div class="mb-2 p-2 bg-white rounded border">
+                            <div class="font-medium" x-text="item.description"></div>
+                            <div class="text-sm text-gray-600">
+                                <span x-text="'₹' + item.total_amount"></span>
+                                <span class="mx-2">•</span>
+                                <span x-text="item.item_type"></span>
+                                <span class="mx-2">•</span>
+                                <span x-text="(item.confidence * 100).toFixed(1) + '% confidence'"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Analysis Debug Section -->
+        <div x-show="debugData?.aiAnalysis && showDebugInfo" class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-robot mr-2"></i>AI Analysis Debug Information
+            </h2>
+            
+            <!-- AI Analysis Response -->
+            <div class="mb-4">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">
+                    <i class="fas fa-brain mr-2"></i>AI Analysis Response
+                </h3>
+                <div class="bg-gray-50 rounded-lg p-4 border max-h-60 overflow-y-auto">
+                    <pre class="text-sm text-gray-700 whitespace-pre-wrap font-mono" x-text="debugData?.aiAnalysis || 'No AI analysis available'"></pre>
+                </div>
+            </div>
+        </div>
+
         <!-- Analysis Results Section -->
         <div x-show="analysisResult" class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-xl font-semibold text-gray-800 mb-4">
@@ -379,6 +481,8 @@
                 // Analysis
                 isAnalyzing: false,
                 analysisResult: null,
+                debugData: null,
+                showDebugInfo: false,
                 error: null,
                 
                 // Testing
@@ -575,6 +679,7 @@ TOTAL: Rs 1,500.00
                     this.isAnalyzing = true;
                     this.error = null;
                     this.analysisResult = null;
+                    this.debugData = null;
 
                     try {
                         // Convert file to base64
@@ -605,13 +710,48 @@ TOTAL: Rs 1,500.00
                         });
 
                         if (response.ok) {
-                            this.analysisResult = await response.json();
+                            const fullResponse = await response.json();
+                            this.analysisResult = fullResponse;
+                            
+                            // Extract debug information from various response formats
+                            const docProcessing = fullResponse.document_processing || {};
+                            this.debugData = {
+                                // OCR text from document processing
+                                ocrText: docProcessing.raw_text || fullResponse.raw_text || fullResponse.rawText,
+                                
+                                // Processing statistics  
+                                processingStats: docProcessing.processing_stats || fullResponse.processing_stats || fullResponse.processingStats,
+                                
+                                // Line items extracted via regex
+                                extractedLineItems: docProcessing.line_items || fullResponse.line_items || fullResponse.lineItems || [],
+                                
+                                // AI analysis information
+                                aiAnalysis: fullResponse.analysis_method === 'ai_fallback' ? 
+                                    JSON.stringify(fullResponse.ai_analysis_notes || fullResponse.message || 'AI fallback analysis used', null, 2) :
+                                    fullResponse.explanation_markdown || null,
+                                
+                                // Additional debug info
+                                analysisMethod: fullResponse.analysis_method || 'standard',
+                                documentType: docProcessing.document_type || fullResponse.document_type,
+                                extractionMethod: docProcessing.extraction_method || 'regex'
+                            };
                         } else {
                             const errorData = await response.json();
                             throw new Error(errorData.detail || errorData.error || 'Analysis failed');
                         }
                     } catch (error) {
                         this.error = 'Analysis failed: ' + error.message;
+                        // Set minimal debug data to show error info
+                        this.debugData = {
+                            ocrText: null,
+                            processingStats: null,
+                            extractedLineItems: [],
+                            aiAnalysis: null,
+                            analysisMethod: 'error',
+                            documentType: 'unknown',
+                            extractionMethod: 'failed',
+                            errorMessage: error.message
+                        };
                     } finally {
                         this.isAnalyzing = false;
                     }
