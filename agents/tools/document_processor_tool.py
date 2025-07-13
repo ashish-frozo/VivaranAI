@@ -9,13 +9,12 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pathlib import Path
 
-from agents.base_agent import BaseTool
 from shared.processors.document_processor import DocumentProcessor
 from shared.schemas.schemas import Language, DocumentType
 
 logger = logging.getLogger(__name__)
 
-class DocumentProcessorTool(BaseTool):
+class DocumentProcessorTool:
     """Tool for processing documents with OCR, table extraction, and text analysis."""
     
     def __init__(self, confidence_threshold: float = 60, enable_camelot: bool = True):
