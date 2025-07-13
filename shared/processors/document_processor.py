@@ -1119,23 +1119,23 @@ class DocumentProcessor:
         # Combine all text
         combined_text = '\n\n'.join(all_text)
         
-        # Calculate overall confidence
-        avg_confidence = (total_confidence / total_words) / 100.0 if total_words > 0 else 0.0
+        # Calculate overall confidence (keep as percentage 0-100)
+        avg_confidence = (total_confidence / total_words) if total_words > 0 else 0.0
         
-        # Try fallback languages if confidence is low
-        if avg_confidence < 0.6 and language != Language.ENGLISH:
+        # Try fallback languages if confidence is low (60%)
+        if avg_confidence < 60 and language != Language.ENGLISH:
             try:
-                logger.info(f"Low confidence ({avg_confidence:.2f}) with {language.value}, trying English fallback")
+                logger.info(f"Low confidence ({avg_confidence:.1f}%) with {language.value}, trying English fallback")
                 fallback_text, fallback_conf = await self._extract_text_ocr(images, Language.ENGLISH)
                 
                 if fallback_conf > avg_confidence:
-                    logger.info(f"English fallback performed better ({fallback_conf:.2f} vs {avg_confidence:.2f})")
+                    logger.info(f"English fallback performed better ({fallback_conf:.1f}% vs {avg_confidence:.1f}%)")
                     return fallback_text, fallback_conf
             except OCRError as e:
                 logger.warning(f"English fallback also failed: {e}")
                 # Continue with original result
         
-        logger.info(f"OCR completed: {len(combined_text)} characters, confidence {avg_confidence:.2f}")
+        logger.info(f"OCR completed: {len(combined_text)} characters, confidence {avg_confidence:.1f}%")
         return combined_text, avg_confidence
     
     def _detect_document_type(self, text: str) -> DocumentType:

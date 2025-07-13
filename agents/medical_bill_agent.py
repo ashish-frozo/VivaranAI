@@ -404,24 +404,30 @@ class MedicalBillAgent(BaseAgent):
                 logger.error(f"Failed to parse AI response as JSON: {e}", doc_id=doc_id, response=response_content)
                 # Try to extract JSON from markdown code blocks if present
                 import re
-                # Try multiple patterns for code blocks
+                # Try multiple patterns for code blocks and handle extra text
                 patterns = [
-                    r'```json\s*(\{.*?\})\s*```',  # ```json
-                    r'```\s*(\{.*?\})\s*```',      # ```
-                    r'(\{.*?\})',                   # Just JSON without code blocks
+                    r'```json\s*(\{.*?\})\s*```',  # ```json with code blocks
+                    r'```\s*(\{.*?\})\s*```',      # ``` with code blocks  
+                    r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})',  # Complete JSON object with nested braces
+                    r'(\{.*?\})\s*(?:\n|$|\s*Note:|.*)',   # JSON followed by extra text/notes
                 ]
                 
                 json_extracted = False
                 for pattern in patterns:
-                    json_match = re.search(pattern, response_content, re.DOTALL)
-                    if json_match:
+                    json_matches = re.findall(pattern, response_content, re.DOTALL)
+                    for json_match in json_matches:
                         try:
-                            ai_analysis = json.loads(json_match.group(1))
-                            logger.info(f"Successfully extracted JSON using pattern: {pattern}", doc_id=doc_id)
-                            json_extracted = True
-                            break
+                            # Clean up the JSON string
+                            json_str = json_match.strip()
+                            if json_str.startswith('{') and json_str.endswith('}'):
+                                ai_analysis = json.loads(json_str)
+                                logger.info(f"Successfully extracted JSON using pattern: {pattern}", doc_id=doc_id)
+                                json_extracted = True
+                                break
                         except json.JSONDecodeError:
                             continue
+                    if json_extracted:
+                        break
                 
                 if not json_extracted:
                     logger.error("No valid JSON found in AI response", doc_id=doc_id)
