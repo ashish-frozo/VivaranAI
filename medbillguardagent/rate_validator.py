@@ -16,9 +16,9 @@ from enum import Enum
 import structlog
 from difflib import SequenceMatcher
 
-from .schemas import RedFlag, LineItemType
+from shared.schemas.schemas import RedFlag, LineItemType
 from .reference_data_loader import ReferenceDataLoader
-from .cache_manager import cache_manager, cached_validation, cached_fuzzy_match
+from shared.utils.cache_manager import cache_manager, cached_validation, cached_fuzzy_match
 
 logger = structlog.get_logger(__name__)
 

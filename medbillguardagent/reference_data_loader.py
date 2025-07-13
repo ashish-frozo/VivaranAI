@@ -26,7 +26,7 @@ import aiofiles
 import structlog
 from pydantic import BaseModel, Field
 
-from .cache_manager import cache_manager, cached_reference_data
+from shared.utils.cache_manager import cache_manager, cached_reference_data
 
 logger = structlog.get_logger(__name__)
 

@@ -15,7 +15,7 @@ import structlog
 from difflib import SequenceMatcher
 from pydantic import BaseModel, Field
 
-from .schemas import RedFlag, LineItemType
+from shared.schemas.schemas import RedFlag, LineItemType
 
 logger = structlog.get_logger(__name__)
 
