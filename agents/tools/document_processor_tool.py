@@ -120,6 +120,7 @@ class DocumentProcessorTool:
             
             # Convert to dictionary for tool response
             result = {
+                "success": True,
                 "doc_id": doc_id,
                 "raw_text": extracted_doc.raw_text,
                 "line_items": [
@@ -147,7 +148,7 @@ class DocumentProcessorTool:
                 ],
                 "document_type": extracted_doc.document_type.value,
                 "language": extracted_doc.language.value,
-                "stats": {
+                "processing_stats": {
                     "pages_processed": extracted_doc.stats.pages_processed,
                     "ocr_confidence": extracted_doc.stats.ocr_confidence,
                     "text_extracted_chars": extracted_doc.stats.text_extracted_chars,
@@ -165,7 +166,7 @@ class DocumentProcessorTool:
                     "doc_id": doc_id,
                     "line_items_found": len(result["line_items"]),
                     "tables_found": len(result["tables"]),
-                    "processing_time_ms": result["stats"]["processing_time_ms"]
+                    "processing_time_ms": result["processing_stats"]["processing_time_ms"]
                 }
             )
             
@@ -173,7 +174,11 @@ class DocumentProcessorTool:
             
         except Exception as e:
             logger.error(f"Document processing failed: {str(e)}", extra={"doc_id": doc_id})
-            raise
+            return {
+                "success": False,
+                "error": str(e),
+                "doc_id": doc_id
+            }
 
 # Import classes for backward compatibility
 from shared.processors.document_processor import ExtractedDocument, ProcessingStats, ExtractedLineItem
