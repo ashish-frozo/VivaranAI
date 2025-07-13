@@ -5,6 +5,7 @@ Provides OCR, table extraction, and document analysis capabilities.
 
 import os
 import logging
+import tempfile
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pathlib import Path
@@ -36,22 +37,61 @@ class DocumentProcessorTool:
     
     async def __call__(
         self,
-        file_path: str,
-        doc_id: str,
-        language: Language = Language.ENGLISH
+        file_content: bytes = None,
+        file_path: str = None,
+        doc_id: str = None,
+        language: Language = Language.ENGLISH,
+        file_format: str = "pdf"
     ) -> Dict[str, Any]:
         """
         Callable interface for the document processor tool.
         
         Args:
-            file_path: Path to the document file
+            file_content: File content as bytes (alternative to file_path)
+            file_path: Path to the document file (alternative to file_content)
             doc_id: Unique document identifier
             language: Language for OCR processing
+            file_format: File format hint when using file_content
             
         Returns:
             Dictionary containing extraction results
         """
-        return await self.process_document(file_path, doc_id, language)
+        # Convert string language to Language enum if needed
+        if isinstance(language, str):
+            language_map = {
+                "english": Language.ENGLISH,
+                "en": Language.ENGLISH,
+                "hindi": Language.HINDI,
+                "hi": Language.HINDI,
+                "bengali": Language.BENGALI,
+                "bn": Language.BENGALI
+            }
+            language = language_map.get(language.lower(), Language.ENGLISH)
+        
+        # Handle both file_content (bytes) and file_path (str) inputs
+        if file_content is not None:
+            # Create a temporary file from the bytes
+            file_extension = f".{file_format.lower()}"
+            with tempfile.NamedTemporaryFile(suffix=file_extension, delete=False) as temp_file:
+                temp_file.write(file_content)
+                temp_file_path = temp_file.name
+            
+            try:
+                # Process the temporary file
+                result = await self.process_document(temp_file_path, doc_id, language)
+                return result
+            finally:
+                # Clean up the temporary file
+                try:
+                    os.unlink(temp_file_path)
+                except OSError:
+                    logger.warning(f"Failed to delete temporary file: {temp_file_path}")
+                    
+        elif file_path is not None:
+            # Use the provided file path directly
+            return await self.process_document(file_path, doc_id, language)
+        else:
+            raise ValueError("Either file_content or file_path must be provided")
     
     async def process_document(
         self,
