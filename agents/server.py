@@ -169,6 +169,27 @@ async def start_background_registration_monitor():
             logger.error("Background registration monitor error", error=str(e))
             await asyncio.sleep(60)  # Wait 1 minute before retrying
 
+async def get_medical_agent():
+    """Get or create medical agent instance - always available."""
+    if app_state["medical_agent"] is None:
+        # Create agent if not exists
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if openai_api_key:
+            try:
+                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+                app_state["medical_agent"] = MedicalBillAgent(
+                    redis_url=redis_url,
+                    openai_api_key=openai_api_key
+                )
+                logger.info("Medical agent created on-demand")
+            except Exception as e:
+                logger.error(f"Failed to create medical agent: {e}")
+                raise HTTPException(status_code=500, detail="Medical agent not available")
+        else:
+            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    
+    return app_state["medical_agent"]
+
 # Global state
 app_state = {
     "registry": None,
@@ -767,6 +788,25 @@ async def test_simple():
     return {"status": "working", "message": "Server is responding"}
 
 
+@app.get("/debug/test-agent-availability")
+async def test_agent_availability():
+    """Test endpoint to verify medical agent is always available."""
+    try:
+        medical_agent = await get_medical_agent()
+        health_result = await medical_agent.health_check()
+        return {
+            "status": "success",
+            "message": "Medical agent is available",
+            "agent_id": medical_agent.agent_id,
+            "health": health_result
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Medical agent not available: {str(e)}"
+        }
+
+
 @app.get("/debug/test-openai")
 async def test_openai():
     """Test OpenAI API connection."""
@@ -1088,9 +1128,12 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             
             return result
             
-        # Fallback: Use medical agent directly if available
-        elif app_state.get("medical_agent") is not None:
+        # Fallback: Use medical agent directly (always available)
+        else:
             logger.info("Using medical agent directly for analysis")
+            
+            # Get or create medical agent (always available)
+            medical_agent = await get_medical_agent()
             
             # Create agent context with correct parameters
             agent_context = AgentContext(
@@ -1111,7 +1154,7 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             
             # Use medical agent directly
             task_input = f"Analyze medical bill with ID: {request.doc_id}"
-            result = await app_state["medical_agent"].execute(agent_context, task_input)
+            result = await medical_agent.execute(agent_context, task_input)
             
             # Convert AgentResult to AnalysisResponse
             analysis_response = AnalysisResponse(
@@ -1143,55 +1186,6 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             )
             
             return analysis_response
-            
-        # Final fallback: Mock analysis for development
-        else:
-            logger.info("Using mock analysis fallback")
-            
-            # Decode base64 content
-            try:
-                import base64
-                content = base64.b64decode(request.file_content).decode('utf-8')
-                logger.info(f"Decoded content: {content[:100]}...")
-            except Exception as e:
-                logger.warning(f"Failed to decode base64 content: {e}")
-                content = "Medical bill content"
-            
-            # Simple mock analysis for testing
-            processing_time = time.time() - start_time
-            
-            # Create a simple analysis result
-            result = AnalysisResponse(
-                success=True,
-                doc_id=request.doc_id,
-                analysis_complete=True,
-                verdict="ok",
-                total_bill_amount=1500.0,
-                total_overcharge=0.0,
-                confidence_score=0.85,
-                red_flags=[],
-                recommendations=[
-                    "Mock analysis completed successfully",
-                    "No significant overcharges detected",
-                    "This is a development fallback - router and agents not available"
-                ],
-                processing_time_seconds=processing_time
-            )
-            
-            # Update metrics
-            if analysis_count:
-                analysis_count.labels(
-                    verdict=result.verdict,
-                    agent_id="mock_agent"
-                ).inc()
-            
-            logger.info(
-                "Mock analysis completed successfully",
-                doc_id=request.doc_id,
-                processing_time_seconds=processing_time
-            )
-            
-            return result
             
     except Exception as e:
         processing_time = time.time() - start_time
