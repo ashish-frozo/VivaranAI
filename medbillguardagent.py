@@ -125,7 +125,7 @@ async def lifespan(app: FastAPI):
         
         # Initialize reference data loader
         reference_loader = ReferenceDataLoader()
-        await reference_loader.load_all_data()
+        await reference_loader.initialize()
         logger.info("Reference data loaded")
         
         # Initialize validators and detectors

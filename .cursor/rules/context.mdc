@@ -1,0 +1,93 @@
+<!-- ================================================================== -->
+<!--  🗂️ TASK STATE — AGENT *MUST* KEEP IN SYNC EACH CYCLE              -->
+<!-- ================================================================== -->
+
+<!-- ✏️ TASK_STATE_START -->
+## Kanban Snapshot
+### Backlog
+- [ ] <!-- id:task-041 --> Implement `/scan` handler returning structured JSON
+- [ ] <!-- id:task-042 --> Performance-test `/scan` (target ≤ 100 ms P99)
+
+### In Progress
+- [ ] _empty_
+
+### Done (last 7 days)
+- [x] <!-- id:task-040 --> Draft BLE scanner API interface & failing tests
+<!-- ✏️ TASK_STATE_END -->
+
+---
+
+<!-- ================================================================== -->
+<!--  📝 CONVERSATION MEMORY — ONE ENTRY PER CHAT SESSION               -->
+<!-- ================================================================== -->
+
+<!-- ✏️ CONVO_LOG_START -->
+## Latest Conversation
+- **UTC Timestamp**: 2025-07-13T05:35:00Z
+- **Participants**: Human (Ashish), Cursor-Agent
+- **What Was Accomplished**
+  - Finalised `context.mdc` incremental-memory template
+  - Added CI guardrail outline for mandatory updates
+- **Decisions Taken**
+  - Adopt `context.mdc` as rolling memory file
+  - Enforce CI failure when TASK_STATE & CONVO_LOG unchanged
+- **Still Open / Next Tasks**
+  - task-041 – Implement `/scan` handler
+  - task-042 – Performance benchmarking under load
+- **Files Touched**
+  - `context.mdc`
+<!-- ✏️ CONVO_LOG_END -->
+
+*Older summaries are auto-archived to* `CONVO_ARCHIVE.mdc` *once this block exceeds ~150 lines.*
+
+---
+
+<!-- ================================================================== -->
+<!--  📜 ADR LOG — APPEND-ONLY                                         -->
+<!-- ================================================================== -->
+
+<!-- ✏️ ADR_START -->
+| Date (UTC) | Decision                                   | Reason                              | Commit |
+|------------|--------------------------------------------|-------------------------------------|--------|
+| 2025-07-13 | Adopt rolling `context.mdc` for conversation memory | Prevent context loss between chats | 0000000 |
+<!-- ✏️ ADR_END -->
+
+---
+
+<!-- ================================================================== -->
+<!--  📖 DOMAIN GLOSSARY — OPTIONAL                                    -->
+<!-- ================================================================== -->
+
+<!-- ✏️ GLOSSARY_START -->
+| Term | Meaning |
+|------|---------|
+| BLE  | Bluetooth Low Energy |
+| P99  | 99th-percentile latency measurement |
+<!-- ✏️ GLOSSARY_END -->
+
+---
+
+<!-- ================================================================== -->
+<!--  ⚠️ KNOWN LIMITATIONS / TECH DEBT                                 -->
+<!-- ================================================================== -->
+
+<!-- ✏️ LIMITATIONS_START -->
+- BLE scan results presently stored in memory; persistence layer TBD
+<!-- ✏️ LIMITATIONS_END -->
+
+---
+
+<!-- ================================================================== -->
+<!--  📊 LIVE METRICS SNAPSHOT (OPTIONAL)                               -->
+<!-- ================================================================== -->
+
+<!-- ✏️ METRICS_START -->
+_No data yet_
+<!-- ✏️ METRICS_END -->
+
+<!-- ================================================================== -->
+<!--  🏁 END OF FILE — ALL TEXT BELOW IS IMMUTABLE                      -->
+<!-- ================================================================== -->
+
+<!--  🏁 END OF FILE — ALL TEXT BELOW IS IMMUTABLE                      -->
+<!-- ================================================================== -->

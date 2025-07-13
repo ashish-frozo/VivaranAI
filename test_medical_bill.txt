@@ -1,0 +1,18 @@
+APOLLO HOSPITALS
+Medical Bill Invoice
+
+Patient Name: John Doe
+Date: 2025-01-15
+Bill No: APL-2025-001
+
+Services:
+1. General Consultation - Dr. Smith    Rs. 1,500.00
+2. Blood Test - CBC                     Rs. 800.00
+3. Blood Test - CBC                     Rs. 800.00
+4. X-Ray Chest                          Rs. 1,200.00
+5. Medicine - Paracetamol               Rs. 150.00
+6. Room Charges (1 day)                 Rs. 2,500.00
+
+Total Amount: Rs. 6,950.00
+
+Thank you for choosing Apollo Hospitals

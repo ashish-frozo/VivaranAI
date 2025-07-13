@@ -391,7 +391,30 @@ class MedicalBillAgent(BaseAgent):
 
             # Parse AI response
             import json
-            ai_analysis = json.loads(response.choices[0].message.content)
+            response_content = response.choices[0].message.content
+            logger.info(f"AI response content: {response_content}", doc_id=doc_id)
+            
+            if not response_content or not response_content.strip():
+                logger.error("Empty response from OpenAI", doc_id=doc_id)
+                raise ValueError("Empty response from OpenAI")
+            
+            try:
+                ai_analysis = json.loads(response_content)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse AI response as JSON: {e}", doc_id=doc_id, response=response_content)
+                # Try to extract JSON from markdown code blocks if present
+                import re
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_content, re.DOTALL)
+                if json_match:
+                    try:
+                        ai_analysis = json.loads(json_match.group(1))
+                        logger.info("Successfully extracted JSON from markdown code block", doc_id=doc_id)
+                    except json.JSONDecodeError:
+                        logger.error("Failed to parse JSON even from markdown code block", doc_id=doc_id)
+                        raise
+                else:
+                    logger.error("No JSON found in AI response", doc_id=doc_id)
+                    raise
             
             # Convert to our standard format
             result = {
