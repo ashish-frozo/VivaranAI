@@ -34,6 +34,25 @@ class DocumentProcessorTool:
         )
         logger.info("Initialized DocumentProcessorTool")
     
+    async def __call__(
+        self,
+        file_path: str,
+        doc_id: str,
+        language: Language = Language.ENGLISH
+    ) -> Dict[str, Any]:
+        """
+        Callable interface for the document processor tool.
+        
+        Args:
+            file_path: Path to the document file
+            doc_id: Unique document identifier
+            language: Language for OCR processing
+            
+        Returns:
+            Dictionary containing extraction results
+        """
+        return await self.process_document(file_path, doc_id, language)
+    
     async def process_document(
         self,
         file_path: str,
