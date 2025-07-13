@@ -715,25 +715,27 @@ TOTAL: Rs 1,500.00
                             
                             // Extract debug information from various response formats
                             const docProcessing = fullResponse.document_processing || {};
+                            const debugData = fullResponse.debug_data || {};
                             this.debugData = {
-                                // OCR text from document processing
-                                ocrText: docProcessing.raw_text || fullResponse.raw_text || fullResponse.rawText,
+                                // OCR text from document processing or debug_data
+                                ocrText: debugData.ocrText || docProcessing.raw_text || fullResponse.raw_text || fullResponse.rawText,
                                 
                                 // Processing statistics  
-                                processingStats: docProcessing.processing_stats || fullResponse.processing_stats || fullResponse.processingStats,
+                                processingStats: debugData.processingStats || docProcessing.processing_stats || fullResponse.processing_stats || fullResponse.processingStats,
                                 
                                 // Line items extracted via regex
-                                extractedLineItems: docProcessing.line_items || fullResponse.line_items || fullResponse.lineItems || [],
+                                extractedLineItems: debugData.extractedLineItems || docProcessing.line_items || fullResponse.line_items || fullResponse.lineItems || [],
                                 
                                 // AI analysis information
-                                aiAnalysis: fullResponse.analysis_method === 'ai_fallback' ? 
-                                    JSON.stringify(fullResponse.ai_analysis_notes || fullResponse.message || 'AI fallback analysis used', null, 2) :
-                                    fullResponse.explanation_markdown || null,
+                                aiAnalysis: debugData.aiAnalysis || 
+                                    (fullResponse.analysis_method === 'ai_fallback' ? 
+                                        JSON.stringify(fullResponse.ai_analysis_notes || fullResponse.message || 'AI fallback analysis used', null, 2) :
+                                        fullResponse.explanation_markdown) || null,
                                 
                                 // Additional debug info
-                                analysisMethod: fullResponse.analysis_method || 'standard',
-                                documentType: docProcessing.document_type || fullResponse.document_type,
-                                extractionMethod: docProcessing.extraction_method || 'regex'
+                                analysisMethod: debugData.analysisMethod || fullResponse.analysis_method || 'standard',
+                                documentType: debugData.documentType || docProcessing.document_type || fullResponse.document_type,
+                                extractionMethod: debugData.extractionMethod || docProcessing.extraction_method || 'regex'
                             };
                         } else {
                             const errorData = await response.json();

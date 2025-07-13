@@ -150,7 +150,8 @@ class MedicalBillAgent(BaseAgent):
                         raw_text=doc_result.get("raw_text", ""),
                         doc_id=doc_id,
                         state_code=state_code,
-                        insurance_type=insurance_type
+                        insurance_type=insurance_type,
+                        processing_stats=processing_stats
                     )
                     return ai_result
                 
@@ -323,7 +324,8 @@ class MedicalBillAgent(BaseAgent):
         raw_text: str, 
         doc_id: str, 
         state_code: Optional[str] = None,
-        insurance_type: str = "cghs"
+        insurance_type: str = "cghs",
+        processing_stats: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
         AI-powered fallback analysis when regex extraction fails.
@@ -458,7 +460,17 @@ class MedicalBillAgent(BaseAgent):
                     (float(ai_analysis.get("estimated_overcharge", 0.0)) / 
                      float(ai_analysis.get("total_bill_amount", 1.0)) * 100) 
                     if float(ai_analysis.get("total_bill_amount", 0.0)) > 0 else 0
-                )
+                ),
+                # Add debug data for frontend visibility
+                "debug_data": {
+                    "ocrText": raw_text,
+                    "processingStats": processing_stats or {},
+                    "extractedLineItems": [],  # No regex line items in AI fallback
+                    "aiAnalysis": response_content,  # Raw AI response for debugging
+                    "analysisMethod": "ai_fallback", 
+                    "documentType": "pharmacy_invoice",  # Default or extract from processing stats
+                    "extractionMethod": "ai_analysis"
+                }
             }
             
             logger.info(
