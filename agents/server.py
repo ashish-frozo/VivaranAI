@@ -37,6 +37,7 @@ from agents.base_agent import ModelHint, AgentContext
 from agents.router_agent import RouterAgent, RoutingStrategy, RoutingRequest
 from agents.redis_state import RedisStateManager
 from agents.tools.enhanced_router_agent import EnhancedRouterAgent
+from agents.simple_router import SimpleDocumentRouter, DocumentType
 from security.oauth2_endpoints import oauth2_router
 from security.auth_middleware import auth_manager
 
@@ -169,73 +170,12 @@ async def start_background_registration_monitor():
             logger.error("Background registration monitor error", error=str(e))
             await asyncio.sleep(60)  # Wait 1 minute before retrying
 
-async def get_medical_agent():
-    """Get or create medical agent instance - always available."""
-    if app_state["medical_agent"] is None:
-        # Create agent if not exists
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        if openai_api_key:
-            try:
-                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-                app_state["medical_agent"] = MedicalBillAgent(
-                    redis_url=redis_url,
-                    openai_api_key=openai_api_key
-                )
-                logger.info("Medical agent created on-demand")
-            except Exception as e:
-                logger.error(f"Failed to create medical agent: {e}")
-                raise HTTPException(status_code=500, detail="Medical agent not available")
-        else:
-            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
-    
-    return app_state["medical_agent"]
 
-async def ensure_agent_is_available(agent_id: str = "medical_bill_agent"):
-    """Ensure specific agent is available, creating it if needed."""
-    if agent_id == "medical_bill_agent":
-        # First try to get from registry
-        if app_state.get("registry"):
-            try:
-                agent_status = await app_state["registry"].get_agent_status(agent_id)
-                if agent_status and agent_status.status.value == "online":
-                    return True
-            except Exception as e:
-                logger.warning(f"Registry check failed for {agent_id}: {e}")
-        
-        # Create/recreate agent if not available
-        if not app_state.get("medical_agent"):
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            if openai_api_key:
-                try:
-                    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-                    app_state["medical_agent"] = MedicalBillAgent(
-                        redis_url=redis_url,
-                        openai_api_key=openai_api_key
-                    )
-                    logger.info("Medical agent created/recreated for reliability")
-                except Exception as e:
-                    logger.error(f"Failed to create medical agent: {e}")
-                    return False
-        
-        # Try to register with registry (best effort)
-        if app_state.get("registry") and app_state.get("medical_agent"):
-            try:
-                await ensure_agent_registration()
-                logger.info("Agent re-registered successfully")
-            except Exception as e:
-                logger.warning(f"Agent registration failed but agent still available: {e}")
-        
-        return True
-    
-    # Future: Add other agent types
-    return False
 
 # Global state
 app_state = {
-    "registry": None,
-    "router": None,
-    "enhanced_router": None,
-    "medical_agent": None,
+    "registry": None,  # Keep for compatibility, but not used in simple routing
+    "simple_router": None,  # New clean router
     "redis_manager": None,
     "startup_time": None,
     "shutdown_event": asyncio.Event()
@@ -348,35 +288,21 @@ async def lifespan(app: FastAPI):
                     logger.error("All agent registry initialization attempts failed")
                     app_state["registry"] = None
     
-    # Initialize Router Agent
+        # Initialize Simple Document Router (Railway-optimized)
     try:
-        if app_state["registry"]:
-            app_state["router"] = RouterAgent(
-                registry=app_state["registry"],
-                redis_url=redis_url
-            )
-            logger.info("Router agent initialized")
-        else:
-            logger.warning("Skipping router agent initialization - Registry not available")
-    except Exception as e:
-        logger.warning(f"Router agent initialization failed: {e}")
-        app_state["router"] = None
-    
-    # Initialize Enhanced Router Agent
-    try:
-        if app_state["registry"]:
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            app_state["enhanced_router"] = EnhancedRouterAgent(
-                registry=app_state["registry"],
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if openai_api_key:
+            app_state["simple_router"] = SimpleDocumentRouter(
                 redis_url=redis_url,
                 openai_api_key=openai_api_key
             )
-            logger.info("Enhanced router agent initialized")
+            logger.info("Simple document router initialized successfully")
         else:
-            logger.warning("Skipping enhanced router agent initialization - Registry not available")
+            logger.warning("OpenAI API key not found, router not initialized")
+            app_state["simple_router"] = None
     except Exception as e:
-        logger.warning(f"Enhanced router agent initialization failed: {e}")
-        app_state["enhanced_router"] = None
+        logger.error(f"Simple router initialization failed: {e}")
+        app_state["simple_router"] = None
     
     # Initialize OAuth2 Manager
     try:
@@ -385,44 +311,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"OAuth2 manager initialization failed: {e}")
     
-    # Initialize Medical Bill Agent with retry logic
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if openai_api_key:
-        for attempt in range(3):
-            try:
-                app_state["medical_agent"] = MedicalBillAgent(
-                    redis_url=redis_url,
-                    openai_api_key=openai_api_key
-                )
-                logger.info("Medical bill agent initialized successfully", attempt=attempt + 1)
-                break
-            except Exception as e:
-                logger.warning(f"Medical agent initialization attempt {attempt + 1} failed: {e}")
-                if attempt < 2:
-                    await asyncio.sleep(5)  # Wait 5 seconds before retry
-                else:
-                    logger.error("All medical agent initialization attempts failed")
-                    app_state["medical_agent"] = None
-    else:
-        logger.warning("OpenAI API key not found, medical agent not created")
-    
-    # Ensure agent registration with multiple attempts
-    if app_state["registry"] and app_state["medical_agent"]:
-        for attempt in range(5):  # Try up to 5 times
-            try:
-                registration_success = await ensure_agent_registration()
-                if registration_success:
-                    logger.info("Agent registration successful", attempt=attempt + 1)
-                    break
-                else:
-                    logger.warning(f"Agent registration attempt {attempt + 1} failed")
-            except Exception as e:
-                logger.error(f"Agent registration attempt {attempt + 1} error: {e}")
-                
-            if attempt < 4:
-                await asyncio.sleep(10)  # Wait 10 seconds before retry
-        else:
-            logger.error("All agent registration attempts failed - agents may not be available")
+    # Note: Agents are now created on-demand by SimpleDocumentRouter
+    # No need for complex initialization and registration logic
     
     # Start background tasks
     try:
@@ -559,35 +449,15 @@ async def health_check():
         components["redis"] = "unhealthy"
     
     try:
-        # Agent registry health
-        if app_state["registry"]:
-            online_agents = await app_state["registry"].list_online_agents()
-            components["registry"] = "healthy"
-            
-            # Check if medical agent is registered, if not try to register it
-            if app_state["medical_agent"]:
-                medical_agent_online = any(
-                    a.agent_id == app_state["medical_agent"].agent_id 
-                    for a in online_agents
-                )
-                if not medical_agent_online:
-                    logger.warning("Medical agent not found in online agents, attempting re-registration")
-                    await ensure_agent_registration()
+        # Simple router health
+        if app_state["simple_router"]:
+            router_health = await app_state["simple_router"].health_check()
+            components["simple_router"] = router_health.get("status", "unknown")
         else:
-            components["registry"] = "unhealthy"
+            components["simple_router"] = "unhealthy"
     except Exception as e:
-        logger.error("Registry health check failed", error=str(e))
-        components["registry"] = "unhealthy"
-    
-    try:
-        # Medical agent health
-        if app_state["medical_agent"]:
-            agent_health = await app_state["medical_agent"].health_check()
-            components["medical_agent"] = agent_health.get("status", "unknown")
-        else:
-            components["medical_agent"] = "unhealthy"
-    except Exception:
-        components["medical_agent"] = "unhealthy"
+        logger.error("Simple router health check failed", error=str(e))
+        components["simple_router"] = "unhealthy"
     
     # Determine overall status
     status = "healthy" if all(c == "healthy" for c in components.values()) else "unhealthy"
@@ -828,31 +698,42 @@ async def test_simple():
     return {"status": "working", "message": "Server is responding"}
 
 
-@app.get("/debug/test-agent-availability")
-async def test_agent_availability():
-    """Test endpoint to verify medical agent is always available."""
+@app.get("/debug/test-router-availability")
+async def test_router_availability():
+    """Test endpoint to verify simple document router is working."""
     try:
-        agent_available = await ensure_agent_is_available("medical_bill_agent")
-        
-        if agent_available and app_state.get("medical_agent"):
-            medical_agent = app_state["medical_agent"]
-            health_result = await medical_agent.health_check()
-            return {
-                "status": "success",
-                "message": "Medical agent is available",
-                "agent_id": medical_agent.agent_id,
-                "health": health_result,
-                "registry_status": "registered" if app_state.get("registry") else "no_registry"
-            }
-        else:
+        if not app_state.get("simple_router"):
             return {
                 "status": "error",
-                "message": "Medical agent not available"
+                "message": "Simple router not available"
             }
+        
+        # Test router health
+        health_result = await app_state["simple_router"].health_check()
+        
+        # Test document type detection
+        test_content = "This is a medical bill from Apollo Hospital for patient treatment and medicines."
+        routing_decision = await app_state["simple_router"].route_document(
+            file_content=test_content,
+            doc_id="test-123",
+            user_id="test-user",
+            filename="test_bill.pdf"
+        )
+        
+        return {
+            "status": "success",
+            "message": "Simple router is working",
+            "router_health": health_result,
+            "test_routing": {
+                "document_type": routing_decision.document_type,
+                "agent_type": routing_decision.agent_type,
+                "confidence": routing_decision.confidence
+            }
+        }
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Medical agent not available: {str(e)}"
+            "message": f"Router test failed: {str(e)}"
         }
 
 
@@ -1045,206 +926,97 @@ async def analyze_fallback(request: AnalysisRequest, background_tasks: Backgroun
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_medical_bill(request: AnalysisRequest, background_tasks: BackgroundTasks):
-    """Analyze a medical bill document."""
+    """Analyze a document using the simple document router."""
     start_time = time.time()
     
     logger.info(
-        "Starting medical bill analysis",
+        "Starting document analysis",
         doc_id=request.doc_id,
         user_id=request.user_id,
         file_format=request.file_format
     )
     
     try:
-        # Debug: Check router status
-        router_status = app_state.get("router")
-        logger.info(f"Router status: {router_status is not None}, type: {type(router_status)}")
+        # Check if simple router is available
+        if not app_state.get("simple_router"):
+            raise HTTPException(status_code=503, detail="Document router not available")
         
-        # If router is available, use it
-        if app_state.get("router") is not None:
-            logger.info("Using router for analysis")
-            # Create routing request
-            routing_request = RoutingRequest(
-                doc_id=request.doc_id,
-                user_id=request.user_id,
-                task_type="medical_bill_analysis",
-                required_capabilities=[TaskCapability.DOCUMENT_PROCESSING, TaskCapability.RATE_VALIDATION],
-                model_hint=ModelHint.STANDARD,
-                routing_strategy=RoutingStrategy.CAPABILITY_BASED,
-                max_agents=1,
-                timeout_seconds=30,
-                priority=3,  # Normal priority
-                metadata={
-                    "file_content": request.file_content,
-                    "language": request.language,
-                    "state_code": request.state_code,
-                    "insurance_type": request.insurance_type,
-                    "file_format": request.file_format
-                }
-            )
-            
-            # Route the request
-            decision = await app_state["router"].route_request(routing_request)
-            
-            # Actually execute the selected agent
-            if decision.selected_agents:
-                selected_agent_id = decision.selected_agents[0].agent_id
-                logger.info(f"Executing selected agent: {selected_agent_id}")
-                
-                # Ensure agent is available before execution
-                if selected_agent_id == "medical_bill_agent":
-                    agent_available = await ensure_agent_is_available(selected_agent_id)
-                    
-                    if agent_available and app_state.get("medical_agent"):
-                        # Decode base64 file content
-                        import base64
-                        file_content = base64.b64decode(request.file_content)
-                        
-                        # Execute the medical bill agent
-                        agent_result = await app_state["medical_agent"].analyze_medical_bill(
-                            file_content=file_content,
-                            doc_id=request.doc_id,
-                            user_id=request.user_id,
-                            language=request.language,
-                            state_code=request.state_code,
-                            insurance_type=request.insurance_type,
-                            file_format=request.file_format
-                        )
-                    else:
-                        raise HTTPException(status_code=503, detail="Medical agent not available")
-                    
-                    # Convert agent result to analysis response
-                    result = AnalysisResponse(
-                        success=agent_result.get("success", False),
-                        doc_id=request.doc_id,
-                        analysis_complete=agent_result.get("analysis_complete", False),
-                        verdict=agent_result.get("verdict", "unknown"),
-                        total_bill_amount=agent_result.get("total_bill_amount", 0.0),
-                        total_overcharge=agent_result.get("total_overcharge", 0.0),
-                        confidence_score=agent_result.get("confidence_score", 0.0),
-                        red_flags=agent_result.get("red_flags", []),
-                        recommendations=agent_result.get("recommendations", []),
-                        processing_time_seconds=time.time() - start_time
-                    )
-                    
-                    # Add OCR text and analysis to the response metadata
-                    if hasattr(result, '__dict__'):
-                        result.__dict__['ocr_text'] = agent_result.get("document_processing", {}).get("raw_text", "")
-                        result.__dict__['analysis'] = agent_result.get("confidence_analysis", {})
-                        result.__dict__['document_processing'] = agent_result.get("document_processing", {})
-                        result.__dict__['rate_validation'] = agent_result.get("rate_validation", {})
-                        result.__dict__['duplicate_detection'] = agent_result.get("duplicate_detection", {})
-                        result.__dict__['prohibited_detection'] = agent_result.get("prohibited_detection", {})
-                        result.__dict__['analysis_summary'] = agent_result.get("analysis_summary", {})
-                else:
-                    # Fallback if agent not found
-                    result = AnalysisResponse(
-                        success=False,
-                        doc_id=request.doc_id,
-                        analysis_complete=False,
-                        verdict="error",
-                        total_bill_amount=0.0,
-                        total_overcharge=0.0,
-                        confidence_score=0.0,
-                        red_flags=[],
-                        recommendations=[f"Selected agent {selected_agent_id} not available"],
-                        processing_time_seconds=time.time() - start_time
-                    )
-            else:
-                # No agents found
-                result = AnalysisResponse(
-                    success=False,
-                    doc_id=request.doc_id,
-                    analysis_complete=False,
-                    verdict="error",
-                    total_bill_amount=0.0,
-                    total_overcharge=0.0,
-                    confidence_score=0.0,
-                    red_flags=[],
-                    recommendations=["No suitable agents found for analysis"],
-                    processing_time_seconds=time.time() - start_time
-                )
-            
-            # Update metrics
-            if analysis_count:
-                analysis_count.labels(
-                    verdict=result.verdict,
-                    agent_id=result.verdict
-                ).inc()
-            
-            logger.info(
-                "Medical bill analysis completed via router",
-                doc_id=request.doc_id,
+        # Decode file content for analysis
+        import base64
+        file_content_bytes = base64.b64decode(request.file_content)
+        file_content_text = file_content_bytes.decode('utf-8', errors='ignore')
+        
+        # Route document to appropriate agent
+        routing_decision = await app_state["simple_router"].route_document(
+            file_content=file_content_text,
+            doc_id=request.doc_id,
+            user_id=request.user_id,
+            filename=f"{request.doc_id}.{request.file_format}"
+        )
+        
+        logger.info(
+            "Document routing completed",
+            doc_type=routing_decision.document_type,
+            agent_type=routing_decision.agent_type,
+            confidence=routing_decision.confidence
+        )
+        
+        # Execute analysis using the routed agent
+        agent_result = await app_state["simple_router"].execute_analysis(
+            routing_decision=routing_decision,
+            file_content=file_content_bytes,
+            doc_id=request.doc_id,
+            user_id=request.user_id,
+            language=request.language,
+            state_code=request.state_code,
+            insurance_type=request.insurance_type,
+            file_format=request.file_format
+        )
+        
+        # Convert agent result to analysis response
+        result = AnalysisResponse(
+            success=agent_result.get("success", False),
+            doc_id=request.doc_id,
+            analysis_complete=agent_result.get("analysis_complete", False),
+            verdict=agent_result.get("verdict", "unknown"),
+            total_bill_amount=agent_result.get("total_bill_amount", 0.0),
+            total_overcharge=agent_result.get("total_overcharge", 0.0),
+            confidence_score=agent_result.get("confidence_score", 0.0),
+            red_flags=agent_result.get("red_flags", []),
+            recommendations=agent_result.get("recommendations", []),
+            processing_time_seconds=time.time() - start_time
+        )
+        
+        # Add document analysis metadata
+        if hasattr(result, '__dict__'):
+            result.__dict__['document_type'] = routing_decision.document_type
+            result.__dict__['agent_type'] = routing_decision.agent_type
+            result.__dict__['routing_confidence'] = routing_decision.confidence
+            result.__dict__['ocr_text'] = agent_result.get("document_processing", {}).get("raw_text", "")
+            result.__dict__['analysis'] = agent_result.get("confidence_analysis", {})
+            result.__dict__['document_processing'] = agent_result.get("document_processing", {})
+            result.__dict__['rate_validation'] = agent_result.get("rate_validation", {})
+            result.__dict__['duplicate_detection'] = agent_result.get("duplicate_detection", {})
+            result.__dict__['prohibited_detection'] = agent_result.get("prohibited_detection", {})
+            result.__dict__['analysis_summary'] = agent_result.get("analysis_summary", {})
+        
+        # Update metrics
+        if analysis_count:
+            analysis_count.labels(
                 verdict=result.verdict,
-                confidence_score=result.confidence_score,
-                processing_time_seconds=time.time() - start_time
-            )
-            
-            return result
-            
-        # Fallback: Use medical agent directly with robust availability check
-        else:
-            logger.info("Using medical agent directly for analysis")
-            
-            # Ensure agent is available
-            agent_available = await ensure_agent_is_available("medical_bill_agent")
-            
-            if not agent_available or not app_state.get("medical_agent"):
-                raise HTTPException(status_code=503, detail="Medical agent not available")
-            
-            medical_agent = app_state["medical_agent"]
-            
-            # Create agent context with correct parameters
-            agent_context = AgentContext(
-                doc_id=request.doc_id,
-                user_id=request.user_id,
-                correlation_id=f"analyze-{request.doc_id}-{int(time.time())}",
-                model_hint=ModelHint.STANDARD,
-                start_time=start_time,
-                metadata={
-                    "file_content": request.file_content,
-                    "language": request.language,
-                    "state_code": request.state_code,
-                    "insurance_type": request.insurance_type,
-                    "file_format": request.file_format,
-                    "task_type": "medical_bill_analysis"
-                }
-            )
-            
-            # Use medical agent directly
-            task_input = f"Analyze medical bill with ID: {request.doc_id}"
-            result = await medical_agent.execute(agent_context, task_input)
-            
-            # Convert AgentResult to AnalysisResponse
-            analysis_response = AnalysisResponse(
-                success=result.success,
-                doc_id=request.doc_id,
-                analysis_complete=result.success,
-                verdict=result.data.get("verdict", "unknown"),
-                total_bill_amount=result.data.get("total_bill_amount", 0.0),
-                total_overcharge=result.data.get("total_overcharge", 0.0),
-                confidence_score=result.confidence,
-                red_flags=result.data.get("red_flags", []),
-                recommendations=result.data.get("recommendations", []),
-                processing_time_seconds=result.execution_time_ms / 1000.0
-            )
-            
-            # Update metrics
-            if analysis_count:
-                analysis_count.labels(
-                    verdict=analysis_response.verdict,
-                    agent_id="medical_bill_agent"
-                ).inc()
-            
-            logger.info(
-                "Medical bill analysis completed via direct agent",
-                doc_id=request.doc_id,
-                verdict=analysis_response.verdict,
-                confidence_score=analysis_response.confidence_score,
-                processing_time_seconds=analysis_response.processing_time_seconds
-            )
-            
-            return analysis_response
+                agent_id=routing_decision.agent_type
+            ).inc()
+        
+        logger.info(
+            "Document analysis completed successfully",
+            doc_id=request.doc_id,
+            verdict=result.verdict,
+            confidence_score=result.confidence_score,
+            document_type=routing_decision.document_type,
+            processing_time_seconds=time.time() - start_time
+        )
+        
+        return result
             
     except Exception as e:
         processing_time = time.time() - start_time
