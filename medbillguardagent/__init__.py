@@ -14,7 +14,7 @@ __email__ = "dev@vivaranai.com"
 
 # Package-level imports for convenience
 # from .main import app  # TODO: Uncomment when main.py is created
-from .schemas import MedBillGuardRequest, MedBillGuardResponse, RedFlag
+from shared.schemas.schemas import MedBillGuardRequest, MedBillGuardResponse, RedFlag
 
 __all__ = [
     # "app",  # TODO: Uncomment when main.py is created
