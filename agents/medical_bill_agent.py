@@ -404,16 +404,27 @@ class MedicalBillAgent(BaseAgent):
                 logger.error(f"Failed to parse AI response as JSON: {e}", doc_id=doc_id, response=response_content)
                 # Try to extract JSON from markdown code blocks if present
                 import re
-                json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_content, re.DOTALL)
-                if json_match:
-                    try:
-                        ai_analysis = json.loads(json_match.group(1))
-                        logger.info("Successfully extracted JSON from markdown code block", doc_id=doc_id)
-                    except json.JSONDecodeError:
-                        logger.error("Failed to parse JSON even from markdown code block", doc_id=doc_id)
-                        raise
-                else:
-                    logger.error("No JSON found in AI response", doc_id=doc_id)
+                # Try multiple patterns for code blocks
+                patterns = [
+                    r'```json\s*(\{.*?\})\s*```',  # ```json
+                    r'```\s*(\{.*?\})\s*```',      # ```
+                    r'(\{.*?\})',                   # Just JSON without code blocks
+                ]
+                
+                json_extracted = False
+                for pattern in patterns:
+                    json_match = re.search(pattern, response_content, re.DOTALL)
+                    if json_match:
+                        try:
+                            ai_analysis = json.loads(json_match.group(1))
+                            logger.info(f"Successfully extracted JSON using pattern: {pattern}", doc_id=doc_id)
+                            json_extracted = True
+                            break
+                        except json.JSONDecodeError:
+                            continue
+                
+                if not json_extracted:
+                    logger.error("No valid JSON found in AI response", doc_id=doc_id)
                     raise
             
             # Convert to our standard format
