@@ -7,7 +7,7 @@ with the OpenAI Agent SDK framework for medical bill analysis.
 
 import asyncio
 import structlog
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 
 from shared.tools.confidence_scorer import ConfidenceScorer
