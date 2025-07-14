@@ -227,6 +227,22 @@ class AnalysisResponse(BaseModel):
     red_flags: list
     recommendations: list
     processing_time_seconds: float
+    
+    # Debug and analysis metadata fields
+    document_type: Optional[str] = None
+    agent_type: Optional[str] = None
+    routing_confidence: Optional[float] = None
+    ocr_text: Optional[str] = None
+    raw_text: Optional[str] = None
+    rawText: Optional[str] = None
+    debug_data: Optional[Dict[str, Any]] = None
+    analysis: Optional[Dict[str, Any]] = None
+    document_processing: Optional[Dict[str, Any]] = None
+    rate_validation: Optional[Dict[str, Any]] = None
+    duplicate_detection: Optional[Dict[str, Any]] = None
+    prohibited_detection: Optional[Dict[str, Any]] = None
+    analysis_summary: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 class EnhancedAnalysisRequest(BaseModel):
@@ -1032,6 +1048,11 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
                 }
             }
         
+        # Extract OCR text from various sources
+        ocr_text = (agent_result.get("document_processing", {}).get("raw_text", "") or 
+                   agent_result.get("debug_data", {}).get("ocrText", "") or
+                   agent_result.get("raw_text", ""))
+        
         # Convert agent result to analysis response
         result = AnalysisResponse(
             success=agent_result.get("success", False),
@@ -1043,26 +1064,20 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             confidence_score=agent_result.get("confidence_score", 0.0),
             red_flags=agent_result.get("red_flags", []),
             recommendations=agent_result.get("recommendations", []),
-            processing_time_seconds=time.time() - start_time
-        )
-        
-        # Add document analysis metadata
-        if hasattr(result, '__dict__'):
-            result.__dict__['document_type'] = routing_decision.document_type
-            result.__dict__['agent_type'] = routing_decision.agent_type
-            result.__dict__['routing_confidence'] = routing_decision.confidence
+            processing_time_seconds=time.time() - start_time,
             
-            # OCR text from various sources
-            ocr_text = (agent_result.get("document_processing", {}).get("raw_text", "") or 
-                       agent_result.get("debug_data", {}).get("ocrText", "") or
-                       agent_result.get("raw_text", ""))
+            # Document analysis metadata
+            document_type=routing_decision.document_type,
+            agent_type=routing_decision.agent_type,
+            routing_confidence=routing_decision.confidence,
             
-            result.__dict__['ocr_text'] = ocr_text
-            result.__dict__['raw_text'] = ocr_text  # Frontend also looks for this field
-            result.__dict__['rawText'] = ocr_text   # Alternative field name
+            # OCR text in multiple formats for frontend compatibility
+            ocr_text=ocr_text,
+            raw_text=ocr_text,
+            rawText=ocr_text,
             
-            # Include debug data for frontend
-            result.__dict__['debug_data'] = agent_result.get("debug_data", {
+            # Debug data for frontend
+            debug_data=agent_result.get("debug_data", {
                 "ocrText": ocr_text,
                 "processingStats": agent_result.get("document_processing", {}).get("processing_stats", {}),
                 "extractedLineItems": agent_result.get("document_processing", {}).get("line_items", []),
@@ -1070,14 +1085,17 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
                 "analysisMethod": agent_result.get("analysis_method", "standard"),
                 "documentType": routing_decision.document_type,
                 "extractionMethod": "document_processor"
-            })
+            }),
             
-            result.__dict__['analysis'] = agent_result.get("confidence_analysis", {})
-            result.__dict__['document_processing'] = agent_result.get("document_processing", {})
-            result.__dict__['rate_validation'] = agent_result.get("rate_validation", {})
-            result.__dict__['duplicate_detection'] = agent_result.get("duplicate_detection", {})
-            result.__dict__['prohibited_detection'] = agent_result.get("prohibited_detection", {})
-            result.__dict__['analysis_summary'] = agent_result.get("analysis_summary", {})
+            # Analysis components
+            analysis=agent_result.get("confidence_analysis", {}),
+            document_processing=agent_result.get("document_processing", {}),
+            rate_validation=agent_result.get("rate_validation", {}),
+            duplicate_detection=agent_result.get("duplicate_detection", {}),
+            prohibited_detection=agent_result.get("prohibited_detection", {}),
+            analysis_summary=agent_result.get("analysis_summary", {}),
+            error=agent_result.get("error")
+        )
         
         # Update metrics
         if analysis_count:
