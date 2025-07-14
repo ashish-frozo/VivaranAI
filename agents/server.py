@@ -1156,24 +1156,24 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
         ocr_text = (agent_result.get("document_processing", {}).get("raw_text", "") or 
                    agent_result.get("debug_data", {}).get("ocrText", "") or
                    agent_result.get("raw_text", ""))
+
+        # Always store document context for chat, even if no query is present
+        conversation_id = f"{request.doc_id}_{request.user_id}"
+        if conversation_id not in conversations:
+            conversations[conversation_id] = {
+                "doc_id": request.doc_id,
+                "user_id": request.user_id,
+                "messages": [],
+                "document_context": ocr_text,
+                "created_at": time.time()
+            }
+        else:
+            conversations[conversation_id]["document_context"] = ocr_text
         
         # Handle user query if provided
         query_response = None
         if request.query and ocr_text:
             try:
-                # Store document context for chat
-                conversation_id = f"{request.doc_id}_{request.user_id}"
-                if conversation_id not in conversations:
-                    conversations[conversation_id] = {
-                        "doc_id": request.doc_id,
-                        "user_id": request.user_id,
-                        "messages": [],
-                        "document_context": ocr_text,
-                        "created_at": time.time()
-                    }
-                else:
-                    conversations[conversation_id]["document_context"] = ocr_text
-                
                 # Get OpenAI client
                 from openai import AsyncOpenAI
                 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
