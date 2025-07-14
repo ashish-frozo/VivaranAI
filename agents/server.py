@@ -1386,7 +1386,7 @@ Guidelines:
         )
         
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        logger.error(f"Chat error: {e}", exc_info=True)
         return ChatResponse(
             success=False,
             doc_id=request.doc_id,
