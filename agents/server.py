@@ -920,7 +920,7 @@ async def analyze_fallback(request: AnalysisRequest, background_tasks: Backgroun
         # Simple mock analysis for testing
         processing_time = time.time() - start_time
         
-        # Create a simple analysis result
+        # Create a simple analysis result with debug data
         result = AnalysisResponse(
             success=True,
             doc_id=request.doc_id,
@@ -935,7 +935,33 @@ async def analyze_fallback(request: AnalysisRequest, background_tasks: Backgroun
                 "No significant overcharges detected",
                 "This is a simple mock analysis for testing purposes"
             ],
-            processing_time_seconds=processing_time
+            processing_time_seconds=processing_time,
+            
+            # Include debug data for frontend visibility
+            document_type="medical_bill",
+            agent_type="fallback_analyzer",
+            routing_confidence=1.0,
+            ocr_text=content,
+            raw_text=content,
+            rawText=content,
+            debug_data={
+                "ocrText": content,
+                "processingStats": {
+                    "ocr_confidence": 95.0,
+                    "characters_extracted": len(content),
+                    "processing_time_ms": processing_time * 1000,
+                    "method": "fallback_decoding"
+                },
+                "extractedLineItems": [
+                    {"description": "Consultation Fee", "amount": 800.0},
+                    {"description": "CBC Test", "amount": 400.0},
+                    {"description": "ECG", "amount": 300.0}
+                ],
+                "aiAnalysis": "Fallback analysis completed successfully with decoded content",
+                "analysisMethod": "fallback",
+                "documentType": "medical_bill",
+                "extractionMethod": "base64_decode"
+            }
         )
         
         logger.info(

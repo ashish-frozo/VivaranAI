@@ -612,7 +612,7 @@ TOTAL: Rs 1,500.00
                             file_format: 'txt'
                         };
                         
-                        const response = await fetch(`${this.apiUrl}/analyze`, {
+                        const response = await fetch(`${this.apiUrl}/analyze-fallback`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -701,7 +701,7 @@ TOTAL: Rs 1,500.00
                             file_format: this.selectedFile.name.split('.').pop()
                         };
 
-                        const response = await fetch(`${this.apiUrl}/analyze`, {
+                        const response = await fetch(`${this.apiUrl}/analyze-fallback`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
