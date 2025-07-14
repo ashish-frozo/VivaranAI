@@ -196,6 +196,9 @@ app_state = {
     "shutdown_event": asyncio.Event()
 }
 
+# In-memory conversation storage
+conversations = {}
+
 
 # Request/Response models
 class HealthResponse(BaseModel):
@@ -214,6 +217,7 @@ class AnalysisRequest(BaseModel):
     state_code: Optional[str] = Field(default=None, description="State code for regional rates")
     insurance_type: str = Field(default="cghs", description="Insurance type")
     file_format: str = Field(default="pdf", description="File format")
+    query: Optional[str] = Field(default=None, description="Optional user query about the document")
 
 
 class AnalysisResponse(BaseModel):
@@ -243,6 +247,7 @@ class AnalysisResponse(BaseModel):
     prohibited_detection: Optional[Dict[str, Any]] = None
     analysis_summary: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    query_response: Optional[str] = None
 
 
 class EnhancedAnalysisRequest(BaseModel):
@@ -271,6 +276,27 @@ class MetricsResponse(BaseModel):
     total_analyses: int
     average_confidence: float
     uptime_seconds: float
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="Role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
+    timestamp: float = Field(..., description="Unix timestamp")
+
+
+class ChatRequest(BaseModel):
+    doc_id: str = Field(..., description="Document identifier for context")
+    user_id: str = Field(..., description="User identifier")
+    message: str = Field(..., description="User message")
+    conversation_history: List[ChatMessage] = Field(default=[], description="Previous conversation history")
+
+
+class ChatResponse(BaseModel):
+    success: bool
+    doc_id: str
+    message: str
+    conversation_id: str
+    timestamp: float
 
 
 @asynccontextmanager
@@ -920,6 +946,57 @@ async def analyze_fallback(request: AnalysisRequest, background_tasks: Backgroun
         # Simple mock analysis for testing
         processing_time = time.time() - start_time
         
+        # Handle user query if provided
+        query_response = None
+        if request.query:
+            try:
+                # Store document context for chat
+                conversation_id = f"{request.doc_id}_{request.user_id}"
+                if conversation_id not in conversations:
+                    conversations[conversation_id] = {
+                        "doc_id": request.doc_id,
+                        "user_id": request.user_id,
+                        "messages": [],
+                        "document_context": content,
+                        "created_at": time.time()
+                    }
+                else:
+                    conversations[conversation_id]["document_context"] = content
+                
+                # Get OpenAI client
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                
+                # Generate response to user query
+                query_prompt = f"""You are a medical bill analysis assistant. A user has uploaded a medical bill and asked a question about it.
+
+Document Content:
+{content[:1500]}...
+
+User Question: {request.query}
+
+Please provide a helpful, informative response about their medical bill. Focus on:
+- Answering their specific question if possible
+- Providing relevant context about medical bills
+- Explaining any medical procedures or charges mentioned
+- Being clear about what you can and cannot determine from the document
+- Keeping the response conversational and user-friendly
+
+Response:"""
+                
+                response = await client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": query_prompt}],
+                    max_tokens=400,
+                    temperature=0.7
+                )
+                
+                query_response = response.choices[0].message.content
+                
+            except Exception as e:
+                logger.error(f"Query processing error: {e}")
+                query_response = "I'm having trouble processing your question right now. Please try using the chat feature after analysis is complete."
+        
         # Create a simple analysis result with debug data
         result = AnalysisResponse(
             success=True,
@@ -961,7 +1038,8 @@ async def analyze_fallback(request: AnalysisRequest, background_tasks: Backgroun
                 "analysisMethod": "fallback",
                 "documentType": "medical_bill",
                 "extractionMethod": "base64_decode"
-            }
+            },
+            query_response=query_response
         )
         
         logger.info(
@@ -1079,6 +1157,57 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
                    agent_result.get("debug_data", {}).get("ocrText", "") or
                    agent_result.get("raw_text", ""))
         
+        # Handle user query if provided
+        query_response = None
+        if request.query and ocr_text:
+            try:
+                # Store document context for chat
+                conversation_id = f"{request.doc_id}_{request.user_id}"
+                if conversation_id not in conversations:
+                    conversations[conversation_id] = {
+                        "doc_id": request.doc_id,
+                        "user_id": request.user_id,
+                        "messages": [],
+                        "document_context": ocr_text,
+                        "created_at": time.time()
+                    }
+                else:
+                    conversations[conversation_id]["document_context"] = ocr_text
+                
+                # Get OpenAI client
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                
+                # Generate response to user query
+                query_prompt = f"""You are a medical bill analysis assistant. A user has uploaded a medical bill and asked a question about it.
+
+Document Content:
+{ocr_text[:1500]}...
+
+User Question: {request.query}
+
+Please provide a helpful, informative response about their medical bill. Focus on:
+- Answering their specific question if possible
+- Providing relevant context about medical bills
+- Explaining any medical procedures or charges mentioned
+- Being clear about what you can and cannot determine from the document
+- Keeping the response conversational and user-friendly
+
+Response:"""
+                
+                response = await client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": query_prompt}],
+                    max_tokens=400,
+                    temperature=0.7
+                )
+                
+                query_response = response.choices[0].message.content
+                
+            except Exception as e:
+                logger.error(f"Query processing error: {e}")
+                query_response = "I'm having trouble processing your question right now. Please try using the chat feature after analysis is complete."
+        
         # Convert agent result to analysis response
         result = AnalysisResponse(
             success=agent_result.get("success", False),
@@ -1120,7 +1249,8 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
             duplicate_detection=agent_result.get("duplicate_detection", {}),
             prohibited_detection=agent_result.get("prohibited_detection", {}),
             analysis_summary=agent_result.get("analysis_summary", {}),
-            error=agent_result.get("error")
+            error=agent_result.get("error"),
+            query_response=query_response
         )
         
         # Update metrics
@@ -1165,6 +1295,105 @@ async def cleanup_analysis_artifacts(doc_id: str):
         # Add specific cleanup logic here if needed
     except Exception as e:
         logger.warning(f"Failed to cleanup artifacts for {doc_id}: {e}")
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_agent(request: ChatRequest):
+    """Chat with the agent about an analyzed document."""
+    try:
+        # Get conversation ID
+        conversation_id = f"{request.doc_id}_{request.user_id}"
+        
+        # Initialize conversation if not exists
+        if conversation_id not in conversations:
+            conversations[conversation_id] = {
+                "doc_id": request.doc_id,
+                "user_id": request.user_id,
+                "messages": [],
+                "document_context": None,
+                "created_at": time.time()
+            }
+        
+        conversation = conversations[conversation_id]
+        
+        # Add user message to conversation
+        user_message = {
+            "role": "user",
+            "content": request.message,
+            "timestamp": time.time()
+        }
+        conversation["messages"].append(user_message)
+        
+        # Get document context if available
+        document_context = ""
+        if conversation["document_context"]:
+            document_context = f"Document Context: {conversation['document_context'][:1000]}..."
+        
+        # Prepare chat history for OpenAI
+        chat_history = []
+        
+        # Add system message with context
+        system_message = f"""You are a helpful medical bill analysis assistant. You're discussing a medical bill document with the user.
+
+{document_context}
+
+Guidelines:
+- Be helpful and informative about medical bills and healthcare costs
+- If discussing specific charges, refer to the document context if available
+- Provide clear explanations about medical procedures and their typical costs
+- Help users understand their bills and identify potential issues
+- Keep responses conversational and user-friendly
+- If you don't have specific information about their document, be honest about limitations
+"""
+        
+        chat_history.append({"role": "system", "content": system_message})
+        
+        # Add conversation history
+        for msg in conversation["messages"][-10:]:  # Keep last 10 messages for context
+            chat_history.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # Get OpenAI client
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        # Generate response
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=chat_history,
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        assistant_response = response.choices[0].message.content
+        
+        # Add assistant response to conversation
+        assistant_message = {
+            "role": "assistant",
+            "content": assistant_response,
+            "timestamp": time.time()
+        }
+        conversation["messages"].append(assistant_message)
+        
+        return ChatResponse(
+            success=True,
+            doc_id=request.doc_id,
+            message=assistant_response,
+            conversation_id=conversation_id,
+            timestamp=time.time()
+        )
+        
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        return ChatResponse(
+            success=False,
+            doc_id=request.doc_id,
+            message="I'm having trouble processing your message right now. Please try again.",
+            conversation_id=f"{request.doc_id}_{request.user_id}",
+            timestamp=time.time()
+        )
 
 
 @app.post("/analyze-enhanced", response_model=EnhancedAnalysisResponse)

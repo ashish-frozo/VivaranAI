@@ -230,6 +230,15 @@
                 </div>
             </div>
 
+            <!-- Query Input -->
+            <div class="mt-6">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Ask a Question (Optional)</label>
+                <textarea x-model="userQuery" 
+                          rows="2" 
+                          placeholder="Ask something about your medical bill... e.g., 'What are the main charges?' or 'Is this bill amount reasonable?'"
+                          class="w-full p-3 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+            </div>
+
             <!-- Analyze Button -->
             <div class="mt-6">
                 <button @click="analyzeDocument()" 
@@ -373,6 +382,16 @@
             </div>
         </div>
 
+        <!-- Query Response -->
+        <div x-show="queryResponse" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                <i class="fas fa-comment-alt mr-2"></i>Answer to Your Question
+            </h2>
+            <div class="bg-white rounded-lg p-4 border-l-4 border-blue-500">
+                <p class="text-gray-700 whitespace-pre-wrap" x-text="queryResponse"></p>
+            </div>
+        </div>
+
         <!-- Analysis Results Section -->
         <div x-show="analysisResult" class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-xl font-semibold text-gray-800 mb-4">
@@ -454,6 +473,66 @@
             </div>
             <p class="text-red-700 mt-1" x-text="error"></p>
         </div>
+
+        <!-- Chat Interface -->
+        <div x-show="analysisResult" class="fixed bottom-6 right-6 z-50">
+            <!-- Chat Toggle Button -->
+            <button @click="toggleChat()" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-200 transform hover:scale-105">
+                <i class="fas fa-comments text-xl"></i>
+            </button>
+
+            <!-- Chat Window -->
+            <div x-show="showChat" 
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 transform scale-95"
+                 x-transition:enter-end="opacity-100 transform scale-100"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 transform scale-100"
+                 x-transition:leave-end="opacity-0 transform scale-95"
+                 class="absolute bottom-16 right-0 w-80 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                
+                <!-- Chat Header -->
+                <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
+                    <h3 class="font-semibold">Chat with Assistant</h3>
+                    <button @click="toggleChat()" class="text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Chat Messages -->
+                <div class="h-64 overflow-y-auto p-4 bg-gray-50">
+                    <div class="space-y-3">
+                        <template x-for="message in chatMessages" :key="message.timestamp">
+                            <div :class="message.role === 'user' ? 'text-right' : 'text-left'">
+                                <div :class="message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800'" 
+                                     class="inline-block max-w-xs px-3 py-2 rounded-lg shadow-sm">
+                                    <p class="text-sm whitespace-pre-wrap" x-text="message.content"></p>
+                                    <span class="text-xs opacity-75 mt-1 block" x-text="message.timestamp"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="p-4 border-t border-gray-200">
+                    <div class="flex space-x-2">
+                        <input type="text" 
+                               x-model="currentChatMessage"
+                               @keyup.enter="sendChatMessage()"
+                               placeholder="Ask about your medical bill..."
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <button @click="sendChatMessage()"
+                                :disabled="!currentChatMessage.trim() || isChatting"
+                                :class="!currentChatMessage.trim() || isChatting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'"
+                                class="px-4 py-2 text-white rounded-md transition-colors duration-200">
+                            <i class="fas fa-paper-plane" :class="isChatting ? 'fa-spinner fa-spin' : ''"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -477,6 +556,7 @@
                 stateCode: 'DL',
                 insuranceType: 'cghs',
                 docId: '',
+                userQuery: '',
                 
                 // Analysis
                 isAnalyzing: false,
@@ -484,6 +564,13 @@
                 debugData: null,
                 showDebugInfo: false,
                 error: null,
+                queryResponse: null,
+                
+                // Chat
+                showChat: false,
+                chatMessages: [],
+                currentChatMessage: '',
+                isChatting: false,
                 
                 // Testing
                 isTestingEndpoint: false,
@@ -666,6 +753,64 @@ TOTAL: Rs 1,500.00
                     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
                 },
 
+                toggleChat() {
+                    this.showChat = !this.showChat;
+                },
+
+                async sendChatMessage() {
+                    if (!this.currentChatMessage.trim() || this.isChatting || !this.docId) return;
+
+                    this.isChatting = true;
+                    const userMessage = this.currentChatMessage.trim();
+                    this.currentChatMessage = '';
+
+                    // Add user message to chat
+                    this.chatMessages.push({
+                        role: 'user',
+                        content: userMessage,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+
+                    try {
+                        const response = await fetch(`${this.apiUrl}/chat`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                doc_id: this.docId,
+                                user_id: 'dashboard-user',
+                                message: userMessage,
+                                conversation_history: this.chatMessages
+                            })
+                        });
+
+                        if (response.ok) {
+                            const chatResponse = await response.json();
+                            this.chatMessages.push({
+                                role: 'assistant',
+                                content: chatResponse.message,
+                                timestamp: new Date().toLocaleTimeString()
+                            });
+                        } else {
+                            this.chatMessages.push({
+                                role: 'assistant',
+                                content: 'Sorry, I\'m having trouble responding right now. Please try again.',
+                                timestamp: new Date().toLocaleTimeString()
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Chat error:', error);
+                        this.chatMessages.push({
+                            role: 'assistant',
+                            content: 'Sorry, I\'m having trouble responding right now. Please try again.',
+                            timestamp: new Date().toLocaleTimeString()
+                        });
+                    } finally {
+                        this.isChatting = false;
+                    }
+                },
+
                 formatUptime(seconds) {
                     if (!seconds) return '0s';
                     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -700,6 +845,11 @@ TOTAL: Rs 1,500.00
                             insurance_type: this.insuranceType,
                             file_format: this.selectedFile.name.split('.').pop()
                         };
+                        
+                        // Add query if provided
+                        if (this.userQuery.trim()) {
+                            payload.query = this.userQuery.trim();
+                        }
 
                         const response = await fetch(`${this.apiUrl}/analyze-fallback`, {
                             method: 'POST',
@@ -712,6 +862,7 @@ TOTAL: Rs 1,500.00
                         if (response.ok) {
                             const fullResponse = await response.json();
                             this.analysisResult = fullResponse;
+                            this.queryResponse = fullResponse.query_response;
                             
                             // Extract debug information from various response formats
                             const docProcessing = fullResponse.document_processing || {};
