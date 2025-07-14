@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import structlog
 import uvicorn
