@@ -107,9 +107,24 @@ except Exception as e:
 async def ensure_agent_registration():
     """Ensure all agents are properly registered. Called on startup and health checks."""
     try:
-        if not app_state["registry"] or not app_state["medical_agent"]:
-            logger.warning("Registry or medical agent not available for registration")
+        if not app_state["registry"]:
+            logger.warning("Registry not available for registration")
             return False
+            
+        # In the new on-demand system, create and register medical agent if needed
+        if not app_state.get("medical_agent"):
+            logger.info("Creating medical agent for registration")
+            
+            # Create medical agent on-demand
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            if not openai_api_key:
+                logger.error("OpenAI API key not found, cannot create medical agent")
+                return False
+                
+            app_state["medical_agent"] = MedicalBillAgent(
+                redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/1"),
+                openai_api_key=openai_api_key
+            )
         
         # Check if medical agent is registered
         agent_status = await app_state["registry"].get_agent_status(app_state["medical_agent"].agent_id)
