@@ -435,15 +435,24 @@ class MedicalBillAgent(BaseAgent):
                     logger.error("No valid JSON found in AI response", doc_id=doc_id)
                     raise
             
+            # Helper to safely convert to float
+            def safe_float(val, default=0.0):
+                try:
+                    if val is None:
+                        return default
+                    return float(val)
+                except (TypeError, ValueError):
+                    return default
+
             # Convert to our standard format
             result = {
                 "success": True,
                 "analysis_complete": True,
                 "doc_id": doc_id,
                 "verdict": ai_analysis.get("verdict", "warning"),
-                "total_bill_amount": float(ai_analysis.get("total_bill_amount", 0.0)),
-                "total_overcharge": float(ai_analysis.get("estimated_overcharge", 0.0)),
-                "confidence_score": float(ai_analysis.get("confidence", 0.7)),
+                "total_bill_amount": safe_float(ai_analysis.get("total_bill_amount", 0.0)),
+                "total_overcharge": safe_float(ai_analysis.get("estimated_overcharge", 0.0)),
+                "confidence_score": safe_float(ai_analysis.get("confidence", 0.7)),
                 "red_flags": ai_analysis.get("red_flags", []),
                 "recommendations": ai_analysis.get("recommendations", []),
                 "message": "Analysis completed using AI fallback (regex extraction failed)",
@@ -457,9 +466,9 @@ class MedicalBillAgent(BaseAgent):
                     "success": True
                 },
                 "overcharge_percentage": (
-                    (float(ai_analysis.get("estimated_overcharge", 0.0)) / 
-                     float(ai_analysis.get("total_bill_amount", 1.0)) * 100) 
-                    if float(ai_analysis.get("total_bill_amount", 0.0)) > 0 else 0
+                    (safe_float(ai_analysis.get("estimated_overcharge", 0.0)) /
+                     safe_float(ai_analysis.get("total_bill_amount", 1.0)) * 100)
+                    if safe_float(ai_analysis.get("total_bill_amount", 0.0)) > 0 else 0
                 ),
                 # Add debug data for frontend visibility
                 "debug_data": {
