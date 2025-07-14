@@ -977,16 +977,60 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
         )
         
         # Execute analysis using the routed agent
-        agent_result = await app_state["simple_router"].execute_analysis(
-            routing_decision=routing_decision,
-            file_content=file_content_bytes,
-            doc_id=request.doc_id,
-            user_id=request.user_id,
-            language=request.language,
-            state_code=request.state_code,
-            insurance_type=request.insurance_type,
-            file_format=request.file_format
-        )
+        try:
+            agent_result = await app_state["simple_router"].execute_analysis(
+                routing_decision=routing_decision,
+                file_content=file_content_bytes,
+                doc_id=request.doc_id,
+                user_id=request.user_id,
+                language=request.language,
+                state_code=request.state_code,
+                insurance_type=request.insurance_type,
+                file_format=request.file_format
+            )
+        except Exception as analysis_error:
+            # If agent analysis fails, try to extract OCR text for debug visibility
+            logger.warning(f"Agent analysis failed, attempting OCR extraction: {analysis_error}")
+            
+            # Try to extract OCR text directly for debug purposes
+            ocr_text = ""
+            processing_stats = {}
+            try:
+                from agents.tools.generic_ocr_tool import GenericOCRTool
+                ocr_tool = GenericOCRTool()
+                ocr_result = await ocr_tool(
+                    file_content=file_content_bytes,
+                    doc_id=request.doc_id,
+                    language=request.language,
+                    file_format=request.file_format
+                )
+                ocr_text = ocr_result.get("raw_text", "")
+                processing_stats = ocr_result.get("processing_stats", {})
+            except Exception as ocr_error:
+                logger.warning(f"OCR extraction also failed: {ocr_error}")
+                ocr_text = f"OCR extraction failed: {str(ocr_error)}"
+            
+            # Return partial result with debug data
+            agent_result = {
+                "success": False,
+                "analysis_complete": False,
+                "verdict": "error",
+                "total_bill_amount": 0.0,
+                "total_overcharge": 0.0,
+                "confidence_score": 0.0,
+                "red_flags": [],
+                "recommendations": [f"Analysis failed: {str(analysis_error)}"],
+                "error": str(analysis_error),
+                "debug_data": {
+                    "ocrText": ocr_text,
+                    "processingStats": processing_stats,
+                    "extractedLineItems": [],
+                    "aiAnalysis": f"Analysis failed: {str(analysis_error)}",
+                    "analysisMethod": "failed",
+                    "documentType": routing_decision.document_type,
+                    "extractionMethod": "ocr_fallback"
+                }
+            }
         
         # Convert agent result to analysis response
         result = AnalysisResponse(
