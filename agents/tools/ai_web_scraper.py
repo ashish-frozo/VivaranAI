@@ -94,7 +94,7 @@ class AIWebScrapingTool:
         Returns:
             ScrapingResult with extracted data
         """
-        self.logger.info(f"Starting to scrape {url} for {schema_type}")
+        self.logger.info(f"[SCRAPE] Starting to scrape URL: {url}", url=url, entities=entities, schema_type=schema_type)
         
         try:
             # For now, use HTML analysis only (simpler implementation)
@@ -123,6 +123,10 @@ class AIWebScrapingTool:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=10) as response:
                     html_content = await response.text()
+
+            # Log the first 500 characters of HTML content
+            snippet = html_content[:500]
+            self.logger.info(f"[SCRAPE] HTML content snippet for {url}", url=url, html_snippet=snippet)
             
             # Parse with BeautifulSoup
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -179,11 +183,16 @@ class AIWebScrapingTool:
             # Parse response with improved JSON extraction
             response_content = response.choices[0].message.content
             extracted_data = self._extract_json_from_response(response_content)
+
+            # Log extraction result
+            num_items = len(extracted_data.get("extracted_data", [])) if isinstance(extracted_data.get("extracted_data", []), list) else 0
+            confidence = extracted_data.get("confidence", 0.0)
+            self.logger.info(f"[SCRAPE] Extraction result for {url}", url=url, num_items=num_items, confidence=confidence)
             
             return ScrapingResult(
                 success=True,
                 data=extracted_data,
-                confidence=extracted_data.get("confidence", 0.6),
+                confidence=confidence,
                 strategy_used="html_analysis",
                 source_url=url
             )
