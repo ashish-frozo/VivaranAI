@@ -35,16 +35,20 @@ async def ensure_user_exists(session: AsyncSession, user_id: uuid.UUID) -> bool:
         if not user_exists:
             # Create a default user
             logger.info(f"Creating default user with id={user_id}")
+            # Generate a unique username based on the user_id
+            username = f"user_{str(user_id)[:8]}"
+            
             insert_query = sa.text("""
-                INSERT INTO users (id, email, name, created_at, updated_at) 
-                VALUES (:user_id, :email, :name, NOW(), NOW())
+                INSERT INTO users (id, email, username, full_name, role, is_active, is_verified, created_at, updated_at) 
+                VALUES (:user_id, :email, :username, :full_name, 'user', TRUE, FALSE, NOW(), NOW())
             """)
             await session.execute(
                 insert_query, 
                 {
                     "user_id": user_id,
                     "email": f"default_{str(user_id)[:8]}@example.com",
-                    "name": f"Default User {str(user_id)[:8]}"
+                    "username": username,
+                    "full_name": f"Default User {str(user_id)[:8]}"
                 }
             )
             await session.commit()
