@@ -134,8 +134,8 @@ async def startup_checks():
     return True
 
 
-async def create_database_tables():
-    """Create database tables during Railway startup with proper event loop handling"""
+def create_database_tables():
+    """Create database tables during Railway startup using synchronous approach to avoid event loop issues"""
     try:
         logger.info("Starting database table creation process during Railway startup...")
         
@@ -147,29 +147,33 @@ async def create_database_tables():
         
         logger.info(f"Database URL configured: {db_url[:50]}...")
         
-        # Import database components
-        from database.models import db_manager, Base
-        from sqlalchemy import text
-        import asyncio
+        # Import database components - use synchronous approach for Railway startup
+        from database.models import Base
+        from sqlalchemy import create_engine, text
         
-        logger.info("Initializing database manager...")
-        if not db_manager.async_engine:
-            db_manager.initialize_async()
-            logger.info("Database manager initialized")
+        # Create a synchronous engine for table creation during startup
+        # Convert async PostgreSQL URL to sync URL
+        sync_db_url = db_url.replace('postgresql+asyncpg://', 'postgresql://')
+        logger.info(f"Using synchronous database URL for startup: {sync_db_url[:50]}...")
         
-        logger.info("Creating database tables...")
+        # Create synchronous engine
+        sync_engine = create_engine(sync_db_url)
+        logger.info("Synchronous database engine created for startup")
         
-        # Use the current event loop for database operations
-        async with db_manager.async_engine.begin() as conn:
-            # Create all tables
-            await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database tables created successfully")
+        # Create tables using synchronous approach
+        logger.info("Creating database tables using synchronous approach...")
+        Base.metadata.create_all(sync_engine)
+        logger.info("Database tables created successfully")
         
         # Verify table creation with a simple query
         logger.info("Verifying table creation...")
-        async with db_manager.get_async_session() as session:
-            result = await session.execute(text("SELECT 1"))
+        with sync_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
             logger.info("Database connection verified")
+        
+        # Close the synchronous engine
+        sync_engine.dispose()
+        logger.info("Synchronous database engine disposed")
         
         return True
     except Exception as e:
