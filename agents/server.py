@@ -1310,9 +1310,9 @@ async def chat_with_agent(request: ChatRequest):
         document_context = ""
         try:
             from database.bill_chat_context import get_bill_by_id
-            from database.models import get_async_db
+            from database.models import db_manager
             
-            async with get_async_db() as session:
+            async with db_manager.get_async_session() as session:
                 bill = await get_bill_by_id(session, request.doc_id)
                 
             if bill:
@@ -1551,14 +1551,14 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest, background
         if result.get("success", False):
             try:
                 from database.bill_chat_context import save_bill_analysis
-                from database.models import get_async_db
+                from database.models import db_manager
                 import hashlib
                 
                 # Calculate file hash for deduplication
                 file_hash = hashlib.sha256(file_content).hexdigest()
                 
                 # Get database session
-                async with get_async_db() as session:
+                async with db_manager.get_async_session() as session:
                     await save_bill_analysis(
                         session=session,
                         user_id=request.user_id,
@@ -1617,9 +1617,9 @@ async def get_user_bills(user_id: str, limit: int = 50):
     """Get user's bill analysis history for chat context."""
     try:
         from database.bill_chat_context import get_user_bills
-        from database.models import get_async_db
+        from database.models import db_manager
         
-        async with get_async_db() as session:
+        async with db_manager.get_async_session() as session:
             bills = await get_user_bills(session, user_id, limit)
             
         # Convert to response format
@@ -1651,9 +1651,9 @@ async def get_bill_details(doc_id: str):
     """Get detailed bill analysis for chat context."""
     try:
         from database.bill_chat_context import get_bill_by_id
-        from database.models import get_async_db
+        from database.models import db_manager
         
-        async with get_async_db() as session:
+        async with db_manager.get_async_session() as session:
             bill = await get_bill_by_id(session, doc_id)
             
         if not bill:
