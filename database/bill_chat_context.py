@@ -13,6 +13,20 @@ from database.models import BillAnalysis, BillAnalysisRepository
 _in_memory_bills = {}
 logger = logging.getLogger(__name__)
 
+def serialize_for_json(obj):
+    """Recursively serialize objects for JSON storage, handling datetime objects"""
+    if isinstance(obj, dict):
+        return {key: serialize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_for_json(item) for item in obj]
+    elif hasattr(obj, 'isoformat'):  # datetime objects
+        return obj.isoformat()
+    elif hasattr(obj, '__dict__'):  # custom objects
+        return serialize_for_json(obj.__dict__)
+    else:
+        return obj
+
+
 async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, filename: str, file_hash: str, file_size: int, content_type: str, analysis_type: str, raw_analysis: Dict[str, Any], structured_results: Dict[str, Any], status: str = "completed") -> BillAnalysis:
     # Handle non-UUID format strings by generating new UUIDs if needed
     try:
@@ -32,7 +46,11 @@ async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, f
     user_id_str = str(user_uuid)
     
     try:
-        # Try to use the database first
+        # Serialize datetime objects and other non-JSON-serializable objects
+        serialized_raw_analysis = serialize_for_json(raw_analysis)
+        serialized_structured_results = serialize_for_json(structured_results)
+        
+        # Try to use the database first with proper session management
         repo = BillAnalysisRepository(session)
         analysis_data = {
             "id": id_uuid,
@@ -43,10 +61,14 @@ async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, f
             "content_type": content_type,
             "analysis_type": analysis_type,
             "status": status,
-            "raw_analysis": raw_analysis,
-            "structured_results": structured_results,
+            "raw_analysis": serialized_raw_analysis,
+            "structured_results": serialized_structured_results,
         }
-        return await repo.create_analysis(analysis_data)
+        
+        # Ensure session is properly committed and closed
+        result = await repo.create_analysis(analysis_data)
+        await session.commit()
+        return result
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
@@ -104,9 +126,11 @@ async def get_user_bills(session: AsyncSession, user_id: str, limit: int = 50) -
     user_id_str = str(user_uuid)
     
     try:
-        # Try to use the database first
+        # Try to use the database first with proper session management
         repo = BillAnalysisRepository(session)
-        return await repo.get_user_analyses(user_uuid, limit=limit)
+        result = await repo.get_user_analyses(user_uuid, limit=limit)
+        await session.commit()
+        return result
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
@@ -147,9 +171,11 @@ async def get_bill_by_id(session: AsyncSession, doc_id: str) -> Optional[BillAna
     id_str = str(id_uuid)
     
     try:
-        # Try to use the database first
+        # Try to use the database first with proper session management
         repo = BillAnalysisRepository(session)
-        return await repo.get_analysis_by_id(id_uuid)
+        result = await repo.get_analysis_by_id(id_uuid)
+        await session.commit()
+        return result
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
