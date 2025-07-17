@@ -338,8 +338,9 @@ async def create_database_tables_startup():
         
         # Verify table creation
         logger.info("Verifying table creation...")
+        from sqlalchemy import text
         async with db_manager.get_async_session() as session:
-            result = await session.execute("SELECT 1")
+            result = await session.execute(text("SELECT 1"))
             logger.info("Database connection verified")
         
         return True
