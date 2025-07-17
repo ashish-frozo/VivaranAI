@@ -493,6 +493,7 @@ class MedicalBillAgent(BaseAgent):
                 "message": "Analysis completed using AI fallback (regex extraction failed)",
                 "analysis_method": "ai_fallback",
                 "ai_analysis_notes": ai_analysis.get("analysis_notes", ""),
+                "line_items": ai_analysis.get("line_items", []),  # Add to standard line_items field
                 "line_items_ai": ai_analysis.get("line_items", []),
                 "document_processing": {
                     "raw_text": raw_text,
