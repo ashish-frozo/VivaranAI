@@ -485,7 +485,7 @@ class EnhancedRouterAgent(BaseAgent):
                         logger.warning(f"Creating {selected_agent_id} on-demand as fallback")
                         import os
                         from agents.medical_bill_agent import MedicalBillAgent
-                        from shared.config import config
+                        from config.env_config import config
                         
                         openai_api_key = os.getenv("OPENAI_API_KEY")
                         if openai_api_key:
