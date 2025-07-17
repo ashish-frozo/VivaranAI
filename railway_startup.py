@@ -126,8 +126,52 @@ async def startup_checks():
     if not await pre_warm_system():
         logger.warning("System pre-warming failed, continuing anyway")
     
+    # Initialize database tables
+    if not await create_database_tables():
+        logger.warning("Database table creation failed, using in-memory fallback")
+    
     logger.info("Startup checks completed successfully")
     return True
+
+
+async def create_database_tables():
+    """Create database tables during Railway startup with enhanced diagnostics"""
+    try:
+        logger.info("Starting database table creation process during Railway startup...")
+        
+        # Check if DATABASE_URL is available
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            logger.warning("DATABASE_URL not found in environment - using in-memory fallback")
+            return False
+        
+        logger.info(f"Database URL configured: {db_url[:50]}...")
+        
+        # Import and initialize database components
+        from database.models import create_tables, db_manager
+        
+        logger.info("Initializing database manager...")
+        if not db_manager.async_engine:
+            db_manager.initialize_async()
+            logger.info("Database manager initialized")
+        
+        logger.info("Creating database tables...")
+        await create_tables()
+        logger.info("Database tables created successfully")
+        
+        # Verify table creation
+        logger.info("Verifying table creation...")
+        async with db_manager.get_async_session() as session:
+            result = await session.execute("SELECT 1")
+            logger.info("Database connection verified")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error creating database tables during Railway startup: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return False
 
 
 def main():
