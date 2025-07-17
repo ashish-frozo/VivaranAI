@@ -4,14 +4,60 @@ Database utility functions for chat context and bill analysis persistence.
 
 import uuid
 import logging
+import sqlalchemy as sa
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from database.repositories import BillAnalysisRepository
+from database.models import BillAnalysis
 
-from database.models import BillAnalysis, BillAnalysisRepository
-
-# In-memory storage fallback when database is not available
+# In-memory fallback storage for bill analyses
 _in_memory_bills = {}
+
 logger = logging.getLogger(__name__)
+
+async def ensure_user_exists(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    """
+    Ensure a user exists in the database with the given ID.
+    If not, create a default user record.
+    
+    Args:
+        session: Database session
+        user_id: UUID of the user to check/create
+        
+    Returns:
+        bool: True if user exists or was created, False if operation failed
+    """
+    try:
+        # Check if user exists
+        query = sa.text("SELECT id FROM users WHERE id = :user_id")
+        result = await session.execute(query, {"user_id": user_id})
+        user_exists = result.scalar() is not None
+        
+        if not user_exists:
+            # Create a default user
+            logger.info(f"Creating default user with id={user_id}")
+            insert_query = sa.text("""
+                INSERT INTO users (id, email, name, created_at, updated_at) 
+                VALUES (:user_id, :email, :name, NOW(), NOW())
+            """)
+            await session.execute(
+                insert_query, 
+                {
+                    "user_id": user_id,
+                    "email": f"default_{str(user_id)[:8]}@example.com",
+                    "name": f"Default User {str(user_id)[:8]}"
+                }
+            )
+            await session.commit()
+            logger.info(f"Created default user with id={user_id}")
+            return True
+        
+        return True
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Failed to ensure user exists: {e}")
+        return False
+
 
 def serialize_for_json(obj):
     """Recursively serialize objects for JSON storage, handling complex Python objects"""
@@ -68,6 +114,9 @@ async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, f
     id_str = str(id_uuid)
     user_id_str = str(user_uuid)
     
+    # Log the UUIDs being used
+    logger.info(f"save_bill_analysis: Using doc_id={id_str}, user_id={user_id_str}")
+    
     try:
         # Serialize datetime objects and other non-JSON-serializable objects
         serialized_raw_analysis = serialize_for_json(raw_analysis)
@@ -89,13 +138,39 @@ async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, f
                 "structured_results": serialized_structured_results,
             }
             
-            # Create analysis with explicit transaction handling
-            result = await repo.create_analysis(analysis_data)
-            await session.commit()
-            return result
+            try:
+                # Create analysis with explicit transaction handling
+                result = await repo.create_analysis(analysis_data)
+                await session.commit()
+                logger.info(f"save_bill_analysis: Successfully saved bill analysis to database for doc_id={id_str}")
+                return result
+            except Exception as fk_error:
+                # Check if it's a foreign key violation for user_id
+                if "violates foreign key constraint" in str(fk_error) and "bill_analyses_user_id_fkey" in str(fk_error):
+                    # Rollback the failed transaction
+                    await session.rollback()
+                    logger.warning(f"Foreign key violation for user_id={user_id_str}, attempting to create default user")
+                    
+                    # Try to create a default user
+                    user_created = await ensure_user_exists(session, user_uuid)
+                    if user_created:
+                        # Try again with the user created
+                        logger.info(f"Retrying bill analysis creation after creating default user")
+                        result = await repo.create_analysis(analysis_data)
+                        await session.commit()
+                        logger.info(f"Successfully saved bill analysis after creating default user")
+                        return result
+                    else:
+                        # If user creation failed, fall back to in-memory storage
+                        logger.warning(f"Failed to create default user, using in-memory fallback")
+                        raise Exception(f"Could not create default user: {user_id_str}")
+                else:
+                    # Rollback on any other database error
+                    await session.rollback()
+                    raise fk_error
         except Exception as db_error:
-            # Rollback on any database error
-            await session.rollback()
+            # Log the specific error
+            logger.error(f"Database error in save_bill_analysis: {db_error}")
             raise db_error
     except Exception as e:
         # Fallback to in-memory storage if database fails
