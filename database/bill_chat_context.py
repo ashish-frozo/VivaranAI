@@ -14,17 +14,40 @@ _in_memory_bills = {}
 logger = logging.getLogger(__name__)
 
 def serialize_for_json(obj):
-    """Recursively serialize objects for JSON storage, handling datetime objects"""
+    """Recursively serialize objects for JSON storage, handling complex Python objects"""
+    import types
+    from enum import Enum
+    
     if isinstance(obj, dict):
         return {key: serialize_for_json(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
+    elif isinstance(obj, (list, tuple, set)):
         return [serialize_for_json(item) for item in obj]
+    elif isinstance(obj, types.MappingProxyType):
+        # Handle mappingproxy objects (like enum.__members__)
+        return {key: serialize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, Enum):
+        # Handle enum values
+        return obj.value
     elif hasattr(obj, 'isoformat'):  # datetime objects
         return obj.isoformat()
-    elif hasattr(obj, '__dict__'):  # custom objects
-        return serialize_for_json(obj.__dict__)
+    elif hasattr(obj, '__dict__') and not isinstance(obj, type):
+        # Handle custom objects (but not classes themselves)
+        try:
+            return serialize_for_json(obj.__dict__)
+        except (TypeError, AttributeError):
+            return str(obj)
+    elif callable(obj):
+        # Handle functions/methods
+        return str(obj)
     else:
-        return obj
+        # Handle primitive types and fallback to string for complex objects
+        try:
+            # Test if object is JSON serializable
+            import json
+            json.dumps(obj)
+            return obj
+        except (TypeError, ValueError):
+            return str(obj)
 
 
 async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, filename: str, file_hash: str, file_size: int, content_type: str, analysis_type: str, raw_analysis: Dict[str, Any], structured_results: Dict[str, Any], status: str = "completed") -> BillAnalysis:
@@ -50,25 +73,30 @@ async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, f
         serialized_raw_analysis = serialize_for_json(raw_analysis)
         serialized_structured_results = serialize_for_json(structured_results)
         
-        # Try to use the database first with proper session management
-        repo = BillAnalysisRepository(session)
-        analysis_data = {
-            "id": id_uuid,
-            "user_id": user_uuid,
-            "filename": filename,
-            "file_hash": file_hash,
-            "file_size": file_size,
-            "content_type": content_type,
-            "analysis_type": analysis_type,
-            "status": status,
-            "raw_analysis": serialized_raw_analysis,
-            "structured_results": serialized_structured_results,
-        }
-        
-        # Ensure session is properly committed and closed
-        result = await repo.create_analysis(analysis_data)
-        await session.commit()
-        return result
+        # Try to use the database first with robust session management
+        try:
+            repo = BillAnalysisRepository(session)
+            analysis_data = {
+                "id": id_uuid,
+                "user_id": user_uuid,
+                "filename": filename,
+                "file_hash": file_hash,
+                "file_size": file_size,
+                "content_type": content_type,
+                "analysis_type": analysis_type,
+                "status": status,
+                "raw_analysis": serialized_raw_analysis,
+                "structured_results": serialized_structured_results,
+            }
+            
+            # Create analysis with explicit transaction handling
+            result = await repo.create_analysis(analysis_data)
+            await session.commit()
+            return result
+        except Exception as db_error:
+            # Rollback on any database error
+            await session.rollback()
+            raise db_error
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
@@ -126,11 +154,16 @@ async def get_user_bills(session: AsyncSession, user_id: str, limit: int = 50) -
     user_id_str = str(user_uuid)
     
     try:
-        # Try to use the database first with proper session management
-        repo = BillAnalysisRepository(session)
-        result = await repo.get_user_analyses(user_uuid, limit=limit)
-        await session.commit()
-        return result
+        # Try to use the database first with robust session management
+        try:
+            repo = BillAnalysisRepository(session)
+            result = await repo.get_user_analyses(user_uuid, limit=limit)
+            await session.commit()
+            return result
+        except Exception as db_error:
+            # Rollback on any database error
+            await session.rollback()
+            raise db_error
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
@@ -171,11 +204,16 @@ async def get_bill_by_id(session: AsyncSession, doc_id: str) -> Optional[BillAna
     id_str = str(id_uuid)
     
     try:
-        # Try to use the database first with proper session management
-        repo = BillAnalysisRepository(session)
-        result = await repo.get_analysis_by_id(id_uuid)
-        await session.commit()
-        return result
+        # Try to use the database first with robust session management
+        try:
+            repo = BillAnalysisRepository(session)
+            result = await repo.get_analysis_by_id(id_uuid)
+            await session.commit()
+            return result
+        except Exception as db_error:
+            # Rollback on any database error
+            await session.rollback()
+            raise db_error
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
