@@ -473,8 +473,10 @@ class EnhancedRouterAgent(BaseAgent):
                 metadata=domain_task_data.get("metadata", {})
             )
             
-            # Execute domain analysis
-            if agent_registration["agent_instance"] is None:
+            # Execute domain analysis - get agent instance without modifying response data
+            agent_instance = agent_registration.get("agent_instance")
+            
+            if agent_instance is None:
                 # Try to get the agent instance from the registry
                 from agents.agent_registry import agent_registry
                 agent_reg = await agent_registry.get_agent_status(selected_agent_id)
@@ -493,16 +495,18 @@ class EnhancedRouterAgent(BaseAgent):
                                 redis_url=config.redis_url,
                                 openai_api_key=openai_api_key
                             )
-                            agent_registration["agent_instance"] = agent_instance
                             logger.info(f"Created {selected_agent_id} on-demand successfully")
                         else:
                             raise Exception(f"Cannot create {selected_agent_id} on-demand: OpenAI API key not found")
                     else:
                         raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
                 else:
-                    agent_registration["agent_instance"] = agent_reg.agent_instance
+                    agent_instance = agent_reg.agent_instance
             
-            domain_result = await agent_registration["agent_instance"].process_task(
+            if agent_instance is None:
+                raise Exception(f"Could not obtain agent instance for {selected_agent_id}")
+            
+            domain_result = await agent_instance.process_task(
                 context=context,
                 task_data=domain_task_data
             )
