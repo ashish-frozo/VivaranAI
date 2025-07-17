@@ -1479,9 +1479,31 @@ async def chat_with_agent(request: ChatRequest):
                         # Check structured_results if available
                         if not line_items and hasattr(bill, 'structured_results') and bill.structured_results:
                             structured = bill.structured_results
-                            if isinstance(structured, dict) and 'line_items' in structured and structured['line_items']:
-                                line_items = structured['line_items']
-                                logger.info("Found line_items in structured_results", count=len(line_items))
+                            if isinstance(structured, dict):
+                                if 'line_items' in structured and structured['line_items']:
+                                    line_items = structured['line_items']
+                                    logger.info("Found line_items in structured_results", count=len(line_items))
+                                # Also check for line_items at the end of the structured results string
+                                elif isinstance(structured, str) and 'line_items' in structured:
+                                    # Try to parse the JSON if it's a string
+                                    try:
+                                        import json
+                                        parsed = json.loads(structured)
+                                        if 'line_items' in parsed:
+                                            line_items = parsed['line_items']
+                                            logger.info("Found line_items in parsed structured_results string", count=len(line_items))
+                                    except Exception as e:
+                                        logger.warning(f"Failed to parse structured_results as JSON: {e}")
+                                
+                                # Additional check for domain_analysis which might contain line_items
+                                elif 'domain_analysis' in structured and isinstance(structured['domain_analysis'], dict):
+                                    domain = structured['domain_analysis']
+                                    if 'line_items' in domain:
+                                        line_items = domain['line_items']
+                                        logger.info("Found line_items in structured_results.domain_analysis", count=len(line_items))
+                                    elif 'results' in domain and isinstance(domain['results'], dict) and 'line_items' in domain['results']:
+                                        line_items = domain['results']['line_items']
+                                        logger.info("Found line_items in structured_results.domain_analysis.results", count=len(line_items))
                         
                         if line_items:
                             context_parts.append(f"Number of line items: {len(line_items)}")
