@@ -392,10 +392,14 @@ class EnhancedRouterAgent(BaseAgent):
             # Restore agent_instance to each selected_agents dict
             for i, agent_reg in enumerate(decision.selected_agents):
                 agent_dict = asdict(agent_reg)
-                if hasattr(agent_reg, "agent_instance"):
+                if hasattr(agent_reg, "agent_instance") and agent_reg.agent_instance is not None:
                     agent_dict["agent_instance"] = agent_reg.agent_instance
                 else:
-                    agent_dict["agent_instance"] = None
+                    # Try to get the agent instance from the registry
+                    from agents.agent_registry import get_agent_registry
+                    registry = get_agent_registry()
+                    agent_instance = registry.get_agent_by_id(agent_reg.agent_id)
+                    agent_dict["agent_instance"] = agent_instance
                 decision_dict["selected_agents"][i] = agent_dict
             return {
                 "success": True,
@@ -469,7 +473,17 @@ class EnhancedRouterAgent(BaseAgent):
             
             # Execute domain analysis
             if agent_registration["agent_instance"] is None:
-                raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
+                # Try to get the agent instance from the registry
+                from agents.agent_registry import get_agent_registry
+                registry = get_agent_registry()
+                agent_instance = registry.get_agent_by_id(selected_agent_id)
+                
+                if agent_instance is None:
+                    raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
+                
+                # Update the agent_registration with the instance
+                agent_registration["agent_instance"] = agent_instance
+            
             domain_result = await agent_registration["agent_instance"].process_task(
                 context=context,
                 task_data=domain_task_data
