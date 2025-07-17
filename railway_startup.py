@@ -135,7 +135,7 @@ async def startup_checks():
 
 
 async def create_database_tables():
-    """Create database tables during Railway startup with enhanced diagnostics"""
+    """Create database tables during Railway startup with proper event loop handling"""
     try:
         logger.info("Starting database table creation process during Railway startup...")
         
@@ -147,8 +147,10 @@ async def create_database_tables():
         
         logger.info(f"Database URL configured: {db_url[:50]}...")
         
-        # Import and initialize database components
-        from database.models import create_tables, db_manager
+        # Import database components
+        from database.models import db_manager, Base
+        from sqlalchemy import text
+        import asyncio
         
         logger.info("Initializing database manager...")
         if not db_manager.async_engine:
@@ -156,12 +158,15 @@ async def create_database_tables():
             logger.info("Database manager initialized")
         
         logger.info("Creating database tables...")
-        await create_tables()
-        logger.info("Database tables created successfully")
         
-        # Verify table creation
+        # Use the current event loop for database operations
+        async with db_manager.async_engine.begin() as conn:
+            # Create all tables
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables created successfully")
+        
+        # Verify table creation with a simple query
         logger.info("Verifying table creation...")
-        from sqlalchemy import text
         async with db_manager.get_async_session() as session:
             result = await session.execute(text("SELECT 1"))
             logger.info("Database connection verified")
