@@ -1479,6 +1479,15 @@ async def chat_with_agent(request: ChatRequest):
                         # Check structured_results if available
                         if not line_items and hasattr(bill, 'structured_results') and bill.structured_results:
                             structured = bill.structured_results
+                            logger.info({
+                                "event": "Debug structured_results",
+                                "structured_type": str(type(structured)),
+                                "structured_keys": list(structured.keys()) if isinstance(structured, dict) else "Not a dict",
+                                "structured_is_str": isinstance(structured, str),
+                                "structured_length": len(str(structured)),
+                                "structured_preview": str(structured)[:200] + "..." if len(str(structured)) > 200 else str(structured)
+                            })
+                            
                             if isinstance(structured, dict):
                                 if 'line_items' in structured and structured['line_items']:
                                     line_items = structured['line_items']
@@ -1498,12 +1507,83 @@ async def chat_with_agent(request: ChatRequest):
                                 # Additional check for domain_analysis which might contain line_items
                                 elif 'domain_analysis' in structured and isinstance(structured['domain_analysis'], dict):
                                     domain = structured['domain_analysis']
+                                    logger.info({
+                                        "event": "Debug domain_analysis",
+                                        "domain_type": str(type(domain)),
+                                        "domain_keys": list(domain.keys()) if isinstance(domain, dict) else "Not a dict",
+                                        "domain_preview": str(domain)[:200] + "..." if len(str(domain)) > 200 else str(domain)
+                                    })
+                                    
                                     if 'line_items' in domain:
                                         line_items = domain['line_items']
                                         logger.info("Found line_items in structured_results.domain_analysis", count=len(line_items))
-                                    elif 'results' in domain and isinstance(domain['results'], dict) and 'line_items' in domain['results']:
-                                        line_items = domain['results']['line_items']
-                                        logger.info("Found line_items in structured_results.domain_analysis.results", count=len(line_items))
+                                    elif 'results' in domain and isinstance(domain['results'], dict):
+                                        results = domain['results']
+                                        logger.info({
+                                            "event": "Debug domain_results",
+                                            "results_type": str(type(results)),
+                                            "results_keys": list(results.keys()) if isinstance(results, dict) else "Not a dict",
+                                            "results_preview": str(results)[:200] + "..." if len(str(results)) > 200 else str(results)
+                                        })
+                                        
+                                        if 'line_items' in results:
+                                            line_items = results['line_items']
+                                            logger.info("Found line_items in structured_results.domain_analysis.results", count=len(line_items))
+                                            
+                            # Try to parse the structured_results if it's a string
+                            elif isinstance(structured, str):
+                                try:
+                                    import json
+                                    parsed = json.loads(structured)
+                                    logger.info({
+                                        "event": "Parsed structured_results string",
+                                        "parsed_type": str(type(parsed)),
+                                        "parsed_keys": list(parsed.keys()) if isinstance(parsed, dict) else "Not a dict",
+                                        "parsed_preview": str(parsed)[:200] + "..." if len(str(parsed)) > 200 else str(parsed)
+                                    })
+                                    
+                                    if isinstance(parsed, dict):
+                                        if 'line_items' in parsed and parsed['line_items']:
+                                            line_items = parsed['line_items']
+                                            logger.info("Found line_items in parsed structured_results", count=len(line_items))
+                                        elif 'domain_analysis' in parsed and isinstance(parsed['domain_analysis'], dict):
+                                            domain = parsed['domain_analysis']
+                                            if 'line_items' in domain:
+                                                line_items = domain['line_items']
+                                                logger.info("Found line_items in parsed structured_results.domain_analysis", count=len(line_items))
+                                            elif 'results' in domain and isinstance(domain['results'], dict) and 'line_items' in domain['results']:
+                                                line_items = domain['results']['line_items']
+                                                logger.info("Found line_items in parsed structured_results.domain_analysis.results", count=len(line_items))
+                                except Exception as e:
+                                    logger.warning(f"Failed to parse structured_results as JSON: {e}")
+                            
+                            # Also check raw_analysis for line_items
+                            if not line_items and hasattr(bill, 'raw_analysis') and bill.raw_analysis:
+                                raw = bill.raw_analysis
+                                logger.info({
+                                    "event": "Debug raw_analysis",
+                                    "raw_type": str(type(raw)),
+                                    "raw_keys": list(raw.keys()) if isinstance(raw, dict) else "Not a dict",
+                                    "raw_preview": str(raw)[:200] + "..." if len(str(raw)) > 200 else str(raw)
+                                })
+                                
+                                if isinstance(raw, dict):
+                                    if 'line_items' in raw and raw['line_items']:
+                                        line_items = raw['line_items']
+                                        logger.info("Found line_items in raw_analysis", count=len(line_items))
+                                    elif 'final_result' in raw and isinstance(raw['final_result'], dict):
+                                        final = raw['final_result']
+                                        if 'line_items' in final and final['line_items']:
+                                            line_items = final['line_items']
+                                            logger.info("Found line_items in raw_analysis.final_result", count=len(line_items))
+                                        elif 'domain_analysis' in final and isinstance(final['domain_analysis'], dict):
+                                            domain = final['domain_analysis']
+                                            if 'line_items' in domain and domain['line_items']:
+                                                line_items = domain['line_items']
+                                                logger.info("Found line_items in raw_analysis.final_result.domain_analysis", count=len(line_items))
+                                            elif 'results' in domain and isinstance(domain['results'], dict) and 'line_items' in domain['results']:
+                                                line_items = domain['results']['line_items']
+                                                logger.info("Found line_items in raw_analysis.final_result.domain_analysis.results", count=len(line_items))
                         
                         if line_items:
                             context_parts.append(f"Number of line items: {len(line_items)}")
