@@ -53,37 +53,17 @@ def setup_railway_environment():
     logger.info(f"Railway environment setup complete - Port: {port}")
     return port
 
-async def run_database_migrations():
-    """Run database migrations using Alembic"""
+async def create_database_tables():
+    """Create database tables using SQLAlchemy metadata"""
     try:
-        import subprocess
-        import sys
-        from pathlib import Path
+        from database.models import create_tables
         
-        logger.info("Running database migrations with Alembic...")
-        alembic_ini_path = Path(__file__).parent / "alembic.ini"
-        
-        if not alembic_ini_path.exists():
-            logger.error(f"Alembic configuration not found at {alembic_ini_path}")
-            return False
-        
-        # Run alembic upgrade head
-        result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=str(Path(__file__).parent),
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            logger.info("Database migrations completed successfully")
-            logger.debug(f"Migration output: {result.stdout}")
-            return True
-        else:
-            logger.error(f"Database migration failed: {result.stderr}")
-            return False
+        logger.info("Creating database tables...")
+        await create_tables()
+        logger.info("Database tables created successfully")
+        return True
     except Exception as e:
-        logger.error(f"Error running database migrations: {e}")
+        logger.error(f"Error creating database tables: {e}")
         return False
 
 def main():
@@ -92,12 +72,12 @@ def main():
         # Setup Railway environment
         port = setup_railway_environment()
         
-        # Run database migrations if DATABASE_URL is set
+        # Create database tables if DATABASE_URL is set
         if os.getenv("DATABASE_URL"):
-            asyncio.run(run_database_migrations())
+            asyncio.run(create_database_tables())
             logger.info("Database setup complete")
         else:
-            logger.warning("DATABASE_URL not set, skipping migrations")
+            logger.warning("DATABASE_URL not set, skipping database setup")
         
         # Import the FastAPI app
         from agents.server import app
