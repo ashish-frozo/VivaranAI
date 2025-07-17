@@ -480,9 +480,27 @@ class EnhancedRouterAgent(BaseAgent):
                 agent_reg = await agent_registry.get_agent_status(selected_agent_id)
                 
                 if agent_reg is None or not hasattr(agent_reg, "agent_instance") or agent_reg.agent_instance is None:
-                    raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
-                
-                agent_registration["agent_instance"] = agent_reg.agent_instance
+                    # Last resort: create agent on-demand if it's the medical_bill_agent
+                    if selected_agent_id == "medical_bill_agent":
+                        logger.warning(f"Creating {selected_agent_id} on-demand as fallback")
+                        import os
+                        from agents.medical_bill_agent import MedicalBillAgent
+                        from shared.config import config
+                        
+                        openai_api_key = os.getenv("OPENAI_API_KEY")
+                        if openai_api_key:
+                            agent_instance = MedicalBillAgent(
+                                redis_url=config.redis_url,
+                                openai_api_key=openai_api_key
+                            )
+                            agent_registration["agent_instance"] = agent_instance
+                            logger.info(f"Created {selected_agent_id} on-demand successfully")
+                        else:
+                            raise Exception(f"Cannot create {selected_agent_id} on-demand: OpenAI API key not found")
+                    else:
+                        raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
+                else:
+                    agent_registration["agent_instance"] = agent_reg.agent_instance
             
             domain_result = await agent_registration["agent_instance"].process_task(
                 context=context,

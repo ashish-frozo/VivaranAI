@@ -403,8 +403,15 @@ async def lifespan(app: FastAPI):
         agent_id = app_state["medical_agent"].agent_id
         reg = await app_state["registry"].get_agent_status(agent_id)
         if reg:
+            # Attach the agent instance to the registration
             reg.agent_instance = app_state["medical_agent"]
+            # Update the cache with the modified registration
             app_state["registry"]._agent_cache[agent_id] = reg
+            logger.info(f"Agent instance attached successfully for {agent_id}")
+        else:
+            logger.error(f"Failed to get agent status for {agent_id}, cannot attach agent instance")
+    else:
+        logger.error("Registry or medical_agent not available for agent instance attachment")
 
     # Start the heartbeat background task
     heartbeat_task = asyncio.create_task(send_agent_heartbeat())
