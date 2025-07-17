@@ -396,9 +396,8 @@ class EnhancedRouterAgent(BaseAgent):
                     agent_dict["agent_instance"] = agent_reg.agent_instance
                 else:
                     # Try to get the agent instance from the registry
-                    from agents.agent_registry import get_agent_registry
-                    registry = get_agent_registry()
-                    agent_instance = registry.get_agent_by_id(agent_reg.agent_id)
+                    from agents.agent_registry import agent_registry
+                    agent_instance = agent_registry.get_agent_by_id(agent_reg.agent_id)
                     agent_dict["agent_instance"] = agent_instance
                 decision_dict["selected_agents"][i] = agent_dict
             return {
@@ -474,9 +473,8 @@ class EnhancedRouterAgent(BaseAgent):
             # Execute domain analysis
             if agent_registration["agent_instance"] is None:
                 # Try to get the agent instance from the registry
-                from agents.agent_registry import get_agent_registry
-                registry = get_agent_registry()
-                agent_instance = registry.get_agent_by_id(selected_agent_id)
+                from agents.agent_registry import agent_registry
+                agent_instance = agent_registry.get_agent_by_id(selected_agent_id)
                 
                 if agent_instance is None:
                     raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
