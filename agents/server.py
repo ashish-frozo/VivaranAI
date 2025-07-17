@@ -1517,6 +1517,9 @@ async def chat_with_agent(request: ChatRequest):
                                     if 'line_items' in domain:
                                         line_items = domain['line_items']
                                         logger.info("Found line_items in structured_results.domain_analysis", count=len(line_items))
+                                    elif 'line_items_ai' in domain:
+                                        line_items = domain['line_items_ai']
+                                        logger.info("Found line_items_ai in structured_results.domain_analysis", count=len(line_items))
                                     elif 'results' in domain and isinstance(domain['results'], dict):
                                         results = domain['results']
                                         logger.info({
@@ -1529,6 +1532,9 @@ async def chat_with_agent(request: ChatRequest):
                                         if 'line_items' in results:
                                             line_items = results['line_items']
                                             logger.info("Found line_items in structured_results.domain_analysis.results", count=len(line_items))
+                                        elif 'line_items_ai' in results:
+                                            line_items = results['line_items_ai']
+                                            logger.info("Found line_items_ai in structured_results.domain_analysis.results", count=len(line_items))
                                             
                             # Try to parse the structured_results if it's a string
                             elif isinstance(structured, str):
@@ -1546,14 +1552,25 @@ async def chat_with_agent(request: ChatRequest):
                                         if 'line_items' in parsed and parsed['line_items']:
                                             line_items = parsed['line_items']
                                             logger.info("Found line_items in parsed structured_results", count=len(line_items))
+                                        elif 'line_items_ai' in parsed and parsed['line_items_ai']:
+                                            line_items = parsed['line_items_ai']
+                                            logger.info("Found line_items_ai in parsed structured_results", count=len(line_items))
                                         elif 'domain_analysis' in parsed and isinstance(parsed['domain_analysis'], dict):
                                             domain = parsed['domain_analysis']
                                             if 'line_items' in domain:
                                                 line_items = domain['line_items']
                                                 logger.info("Found line_items in parsed structured_results.domain_analysis", count=len(line_items))
-                                            elif 'results' in domain and isinstance(domain['results'], dict) and 'line_items' in domain['results']:
-                                                line_items = domain['results']['line_items']
-                                                logger.info("Found line_items in parsed structured_results.domain_analysis.results", count=len(line_items))
+                                            elif 'line_items_ai' in domain:
+                                                line_items = domain['line_items_ai']
+                                                logger.info("Found line_items_ai in parsed structured_results.domain_analysis", count=len(line_items))
+                                            elif 'results' in domain and isinstance(domain['results'], dict):
+                                                results = domain['results']
+                                                if 'line_items' in results:
+                                                    line_items = results['line_items']
+                                                    logger.info("Found line_items in parsed structured_results.domain_analysis.results", count=len(line_items))
+                                                elif 'line_items_ai' in results:
+                                                    line_items = results['line_items_ai']
+                                                    logger.info("Found line_items_ai in parsed structured_results.domain_analysis.results", count=len(line_items))
                                 except Exception as e:
                                     logger.warning(f"Failed to parse structured_results as JSON: {e}")
                             
