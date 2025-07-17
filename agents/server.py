@@ -703,7 +703,7 @@ async def metrics_summary():
     return MetricsResponse(
         timestamp=current_time,
         active_agents=active_agents_count,
-        total_analyses=total_analyses,
+        total_analyses=int(total_analyses),  # Cast to int to avoid validation error
         average_confidence=0.85,  # Default placeholder
         uptime_seconds=uptime
     )
@@ -1386,9 +1386,37 @@ async def chat_with_agent(request: ChatRequest):
                 if hasattr(bill, 'raw_analysis') and bill.raw_analysis:
                     raw_analysis = bill.raw_analysis
                     
+                    # Debug log the raw_analysis structure
+                    logger.info(
+                        "Raw analysis structure in chat context",
+                        doc_id=request.doc_id,
+                        raw_analysis_type=type(raw_analysis),
+                        raw_analysis_keys=list(raw_analysis.keys()) if isinstance(raw_analysis, dict) else "Not a dict"
+                    )
+                    
                     # Extract final result information
                     if isinstance(raw_analysis, dict) and 'final_result' in raw_analysis:
                         final_result = raw_analysis['final_result']
+                        
+                        # Debug log the final_result structure
+                        logger.info(
+                            "Final result structure in chat context",
+                            doc_id=request.doc_id,
+                            final_result_type=type(final_result),
+                            final_result_keys=list(final_result.keys()) if isinstance(final_result, dict) else "Not a dict",
+                            has_line_items='line_items' in final_result if isinstance(final_result, dict) else False
+                        )
+                        
+                        # If line_items exists, log its structure
+                        if isinstance(final_result, dict) and 'line_items' in final_result:
+                            line_items = final_result['line_items']
+                            logger.info(
+                                "Line items structure in chat context",
+                                doc_id=request.doc_id,
+                                line_items_type=type(line_items),
+                                line_items_count=len(line_items) if isinstance(line_items, list) else "Not a list",
+                                first_item=line_items[0] if isinstance(line_items, list) and line_items else "No items"
+                            )
                         
                         # Add verdict and confidence
                         if 'verdict' in final_result:
@@ -1405,12 +1433,44 @@ async def chat_with_agent(request: ChatRequest):
                             context_parts.append(f"Suspected overcharge: ₹{final_result['overcharge_amount']}")
                         
                         # Add line items/medicines information
+                        line_items = None
+                        
+                        # Check multiple possible locations for line items
                         if 'line_items' in final_result and final_result['line_items']:
-                            context_parts.append(f"Number of line items: {len(final_result['line_items'])}")
+                            line_items = final_result['line_items']
+                            logger.info("Found line_items directly in final_result", count=len(line_items))
+                        elif 'results' in final_result and isinstance(final_result['results'], dict):
+                            results = final_result['results']
+                            if 'line_items' in results and results['line_items']:
+                                line_items = results['line_items']
+                                logger.info("Found line_items in final_result.results", count=len(line_items))
+                            elif 'debug_line_items' in results and results['debug_line_items']:
+                                line_items = results['debug_line_items']
+                                logger.info("Found debug_line_items in final_result.results", count=len(line_items))
+                        
+                        # Also check raw_analysis for line_items
+                        if not line_items and 'results' in raw_analysis and isinstance(raw_analysis['results'], dict):
+                            results = raw_analysis['results']
+                            if 'line_items' in results and results['line_items']:
+                                line_items = results['line_items']
+                                logger.info("Found line_items in raw_analysis.results", count=len(line_items))
+                            elif 'debug_line_items' in results and results['debug_line_items']:
+                                line_items = results['debug_line_items']
+                                logger.info("Found debug_line_items in raw_analysis.results", count=len(line_items))
+                        
+                        # Check structured_results if available
+                        if not line_items and hasattr(bill, 'structured_results') and bill.structured_results:
+                            structured = bill.structured_results
+                            if isinstance(structured, dict) and 'line_items' in structured and structured['line_items']:
+                                line_items = structured['line_items']
+                                logger.info("Found line_items in structured_results", count=len(line_items))
+                        
+                        if line_items:
+                            context_parts.append(f"Number of line items: {len(line_items)}")
                             
                             # Add details about first few medicines/items
                             medicines = []
-                            for i, item in enumerate(final_result['line_items'][:5]):  # First 5 items
+                            for i, item in enumerate(line_items[:5]):  # First 5 items
                                 if isinstance(item, dict):
                                     item_name = item.get('name', item.get('description', f'Item {i+1}'))
                                     item_amount = item.get('amount', item.get('cost', 'N/A'))
@@ -1418,6 +1478,8 @@ async def chat_with_agent(request: ChatRequest):
                             
                             if medicines:
                                 context_parts.append(f"Sample medicines/items: {', '.join(medicines)}")
+                        else:
+                            logger.warning("No line items found in any location", doc_id=request.doc_id)
                         
                         # Add any specific findings or recommendations
                         if 'findings' in final_result:
