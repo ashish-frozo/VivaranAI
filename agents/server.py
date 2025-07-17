@@ -1306,10 +1306,95 @@ async def chat_with_agent(request: ChatRequest):
         }
         conversation["messages"].append(user_message)
         
-        # Get document context if available
+        # Get document context from database
         document_context = ""
-        if conversation["document_context"]:
-            document_context = f"Document Context: {conversation['document_context'][:1000]}..."
+        try:
+            from database.bill_chat_context import get_bill_by_id
+            from database.database import get_db_session
+            
+            async with get_db_session() as session:
+                bill = await get_bill_by_id(session, request.doc_id)
+                
+            if bill:
+                # Extract relevant information from the bill analysis
+                context_parts = []
+                
+                # Add basic bill information
+                context_parts.append(f"Bill filename: {bill.filename}")
+                context_parts.append(f"Analysis status: {bill.status}")
+                
+                # Extract analysis results
+                if hasattr(bill, 'raw_analysis') and bill.raw_analysis:
+                    raw_analysis = bill.raw_analysis
+                    
+                    # Extract final result information
+                    if isinstance(raw_analysis, dict) and 'final_result' in raw_analysis:
+                        final_result = raw_analysis['final_result']
+                        
+                        # Add verdict and confidence
+                        if 'verdict' in final_result:
+                            context_parts.append(f"Analysis verdict: {final_result['verdict']}")
+                        if 'confidence' in final_result:
+                            context_parts.append(f"Confidence level: {final_result['confidence']}%")
+                        
+                        # Add total amount if available
+                        if 'total_amount' in final_result:
+                            context_parts.append(f"Total bill amount: ₹{final_result['total_amount']}")
+                        
+                        # Add overcharge information
+                        if 'overcharge_amount' in final_result:
+                            context_parts.append(f"Suspected overcharge: ₹{final_result['overcharge_amount']}")
+                        
+                        # Add line items/medicines information
+                        if 'line_items' in final_result and final_result['line_items']:
+                            context_parts.append(f"Number of line items: {len(final_result['line_items'])}")
+                            
+                            # Add details about first few medicines/items
+                            medicines = []
+                            for i, item in enumerate(final_result['line_items'][:5]):  # First 5 items
+                                if isinstance(item, dict):
+                                    item_name = item.get('name', item.get('description', f'Item {i+1}'))
+                                    item_amount = item.get('amount', item.get('cost', 'N/A'))
+                                    medicines.append(f"{item_name}: ₹{item_amount}")
+                            
+                            if medicines:
+                                context_parts.append(f"Sample medicines/items: {', '.join(medicines)}")
+                        
+                        # Add any specific findings or recommendations
+                        if 'findings' in final_result:
+                            context_parts.append(f"Key findings: {final_result['findings']}")
+                        if 'recommendations' in final_result:
+                            context_parts.append(f"Recommendations: {final_result['recommendations']}")
+                
+                # Create document context string
+                if context_parts:
+                    document_context = f"Document Context: {' | '.join(context_parts)}"
+                    
+                    # Update conversation context for future use
+                    conversation["document_context"] = document_context
+                    
+                    logger.info(
+                        "Retrieved bill context for chat",
+                        doc_id=request.doc_id,
+                        context_length=len(document_context)
+                    )
+                else:
+                    logger.warning(
+                        "No meaningful context found in bill analysis",
+                        doc_id=request.doc_id
+                    )
+            else:
+                logger.warning(
+                    "No bill found for chat context",
+                    doc_id=request.doc_id
+                )
+                
+        except Exception as e:
+            logger.error(
+                "Failed to retrieve bill context for chat",
+                doc_id=request.doc_id,
+                error=str(e)
+            )
         
         # Prepare chat history for OpenAI
         chat_history = []
@@ -1462,6 +1547,45 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest, background
             success=result.get("success", False)
         )
         
+        # Save analysis results to database for chat context (if analysis was successful)
+        if result.get("success", False):
+            try:
+                from database.bill_chat_context import save_bill_analysis
+                from database.database import get_db_session
+                import hashlib
+                
+                # Calculate file hash for deduplication
+                file_hash = hashlib.sha256(file_content).hexdigest()
+                
+                # Get database session
+                async with get_db_session() as session:
+                    await save_bill_analysis(
+                        session=session,
+                        user_id=request.user_id,
+                        doc_id=request.doc_id,
+                        filename=getattr(request, 'filename', f"document_{request.doc_id}.pdf"),
+                        file_hash=file_hash,
+                        file_size=len(file_content),
+                        content_type=request.file_format or "application/pdf",
+                        analysis_type="medical",
+                        raw_analysis=result,
+                        structured_results=result.get("final_result", {}),
+                        status="completed"
+                    )
+                    
+                logger.info(
+                    "Bill analysis saved for chat context",
+                    doc_id=request.doc_id,
+                    user_id=request.user_id
+                )
+                    
+            except Exception as e:
+                logger.warning(
+                    "Failed to save bill analysis for chat context",
+                    doc_id=request.doc_id,
+                    error=str(e)
+                )
+        
         return EnhancedAnalysisResponse(
             success=result.get("success", False),
             doc_id=result.get("doc_id", request.doc_id),
@@ -1485,6 +1609,71 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest, background
         )
         
         raise HTTPException(status_code=500, detail=error_msg)
+
+
+# Bill management endpoints
+@app.get("/bills")
+async def get_user_bills(user_id: str, limit: int = 50):
+    """Get user's bill analysis history for chat context."""
+    try:
+        from database.bill_chat_context import get_user_bills
+        from database.database import get_db_session
+        
+        async with get_db_session() as session:
+            bills = await get_user_bills(session, user_id, limit)
+            
+        # Convert to response format
+        bills_data = []
+        for bill in bills:
+            bills_data.append({
+                "id": str(bill.id),
+                "filename": bill.filename,
+                "created_at": bill.created_at.isoformat() if hasattr(bill.created_at, 'isoformat') else str(bill.created_at),
+                "status": bill.status,
+                "analysis_type": bill.analysis_type,
+                "total_amount": getattr(bill, 'total_amount', 0),
+                "suspected_overcharges": getattr(bill, 'suspected_overcharges', 0),
+                "confidence_level": getattr(bill, 'confidence_level', 0)
+            })
+            
+        return {
+            "bills": bills_data,
+            "total": len(bills_data)
+        }
+        
+    except Exception as e:
+        logger.error("Failed to retrieve user bills", user_id=user_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve bills")
+
+
+@app.get("/bills/{doc_id}")
+async def get_bill_details(doc_id: str):
+    """Get detailed bill analysis for chat context."""
+    try:
+        from database.bill_chat_context import get_bill_by_id
+        from database.database import get_db_session
+        
+        async with get_db_session() as session:
+            bill = await get_bill_by_id(session, doc_id)
+            
+        if not bill:
+            raise HTTPException(status_code=404, detail="Bill not found")
+            
+        return {
+            "id": str(bill.id),
+            "filename": bill.filename,
+            "created_at": bill.created_at.isoformat() if hasattr(bill.created_at, 'isoformat') else str(bill.created_at),
+            "status": bill.status,
+            "analysis_type": bill.analysis_type,
+            "raw_analysis": bill.raw_analysis,
+            "structured_results": bill.structured_results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to retrieve bill details", doc_id=doc_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve bill details")
 
 
 # Agent management endpoints
