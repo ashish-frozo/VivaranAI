@@ -127,7 +127,7 @@ async def startup_checks():
         logger.warning("System pre-warming failed, continuing anyway")
     
     # Initialize database tables
-    if not await create_database_tables():
+    if not create_database_tables():
         logger.warning("Database table creation failed, using in-memory fallback")
     
     logger.info("Startup checks completed successfully")

@@ -444,7 +444,7 @@ async def lifespan(app: FastAPI):
     # Initialize database tables
     try:
         logger.info("Starting database table creation during FastAPI startup...")
-        await create_database_tables_startup()
+        create_database_tables_startup()
         logger.info("Database table creation completed during FastAPI startup")
     except Exception as e:
         logger.error(f"Database table creation failed during FastAPI startup: {e}")
