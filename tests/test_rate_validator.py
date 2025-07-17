@@ -14,7 +14,7 @@ import asyncio
 from decimal import Decimal
 
 from medbillguardagent.rate_validator import (
-    RateValidator,
+    RateValidator, 
     ValidationResult,
     RateSource
 )

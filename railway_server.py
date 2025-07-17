@@ -25,43 +25,30 @@ logger = logging.getLogger(__name__)
 def setup_railway_environment():
     """Setup Railway-specific environment variables"""
     
-    # Railway provides PORT automatically
-    port = int(os.getenv("PORT", "8001"))
+    # Import config object after path setup
+    from config.env_config import config
+
+    # Railway provides PORT automatically, which overrides the config
+    port = int(os.getenv("PORT", config.server.port))
+    config.server.port = port
     
-    # Set Railway-specific defaults
-    os.environ.setdefault("HOST", "0.0.0.0")
-    os.environ.setdefault("PORT", str(port))
-    os.environ.setdefault("ENVIRONMENT", "production")
-    os.environ.setdefault("DEBUG", "false")
-    os.environ.setdefault("LOG_LEVEL", "INFO")
+    # Set Railway-specific defaults in the config object
+    config.app.environment = "production"
+    config.app.debug = False
+    config.logging.level = "INFO"
     
     # Railway database URLs (set via Railway dashboard)
-    if not os.getenv("DATABASE_URL"):
-        logger.warning("DATABASE_URL not set - using SQLite fallback")
-        os.environ["DATABASE_URL"] = "sqlite:///./railway_medbillguard.db"
-    
-    if not os.getenv("ASYNC_DATABASE_URL"):
-        db_url = os.getenv("DATABASE_URL", "")
-        if db_url.startswith("postgresql://"):
-            async_db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        else:
-            async_db_url = "sqlite+aiosqlite:///./railway_medbillguard.db"
-        os.environ["ASYNC_DATABASE_URL"] = async_db_url
+    config.databases.audit_db.url = os.getenv("DATABASE_URL", config.databases.audit_db.url)
     
     # Railway Redis URL (set via Railway dashboard)
-    if not os.getenv("REDIS_URL"):
-        logger.warning("REDIS_URL not set - Redis features will be disabled")
+    config.databases.redis.url = os.getenv("REDIS_URL", config.databases.redis.url)
     
     # JWT Secret (set via Railway dashboard)
-    if not os.getenv("JWT_SECRET_KEY"):
-        logger.warning("JWT_SECRET_KEY not set - using default")
-        os.environ["JWT_SECRET_KEY"] = "railway-default-secret-key"
+    config.security.jwt.secret_key = os.getenv("JWT_SECRET_KEY", config.security.jwt.secret_key)
     
     # Performance settings for Railway
-    os.environ.setdefault("MAX_WORKERS", "4")
-    os.environ.setdefault("TIMEOUT_SECONDS", "30")
-    os.environ.setdefault("API_RATE_LIMIT", "100")
-    os.environ.setdefault("FORCE_HTTPS", "true")
+    config.server.workers = int(os.getenv("MAX_WORKERS", config.server.workers))
+    config.server.timeout = int(os.getenv("TIMEOUT_SECONDS", config.server.timeout))
     
     logger.info(f"Railway environment setup complete - Port: {port}")
     return port
@@ -94,11 +81,12 @@ def main():
         
         # Start the server
         logger.info("Starting MedBillGuardAgent on Railway...")
+        from config.env_config import config
         uvicorn.run(
             app,
-            host="0.0.0.0",
-            port=port,
-            log_level=os.getenv("LOG_LEVEL", "info").lower(),
+            host=config.server.host,
+            port=config.server.port,
+            log_level=config.logging.level.lower(),
             access_log=True,
             loop="asyncio"
         )

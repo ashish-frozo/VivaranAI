@@ -106,6 +106,18 @@ class Config:
         """Get log file path"""
         return os.getenv("LOG_FILE", "agent_server.log")
 
+    @property
+    def ocr_confidence_threshold(self) -> float:
+        return float(os.getenv("OCR_CONFIDENCE_THRESHOLD", "60"))
+
+    @property
+    def ocr_languages(self) -> list:
+        return os.getenv("OCR_LANGUAGES", "english,hindi").split(",")
+
+    @property
+    def supported_formats(self) -> list:
+        return os.getenv("SUPPORTED_FORMATS", "pdf,jpg,jpeg,png").split(",")
+
 
 # Global config instance
 config = Config()

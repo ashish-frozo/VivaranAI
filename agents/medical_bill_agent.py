@@ -16,12 +16,13 @@ from opentelemetry import trace
 
 from agents.base_agent import BaseAgent, AgentContext, AgentResult, ModelHint
 from agents.tools import (
-    DocumentProcessorTool,
     RateValidatorTool,
     DuplicateDetectorTool,
     ProhibitedDetectorTool,
-    ConfidenceScorerTool
+    ConfidenceScorerTool,
+    SmartDataTool
 )
+from .smart_data_agent import SmartDataAgent
 
 logger = structlog.get_logger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -43,7 +44,8 @@ class MedicalBillAgent(BaseAgent):
         self,
         redis_url: str = "redis://localhost:6379/1",
         openai_api_key: Optional[str] = None,
-        reference_data_loader = None
+        reference_data_loader = None,
+        smart_data_agent: Optional[SmartDataAgent] = None
     ):
         """Initialize the medical bill agent with all analysis tools."""
         
@@ -51,20 +53,21 @@ class MedicalBillAgent(BaseAgent):
         self.openai_api_key = openai_api_key
         
         # Initialize all analysis tools
-        self.document_processor_tool = DocumentProcessorTool()
         self.rate_validator_tool = RateValidatorTool(reference_data_loader=reference_data_loader)
         self.duplicate_detector_tool = DuplicateDetectorTool()
         self.prohibited_detector_tool = ProhibitedDetectorTool()
         self.confidence_scorer_tool = ConfidenceScorerTool(openai_api_key=openai_api_key)
+        self.smart_data_tool = SmartDataTool(smart_data_agent) if smart_data_agent else None
         
         # Collect all tools for BaseAgent
         tools = [
-            self.document_processor_tool,
             self.rate_validator_tool,
             self.duplicate_detector_tool,
             self.prohibited_detector_tool,
-            self.confidence_scorer_tool
+            self.confidence_scorer_tool,
         ]
+        if self.smart_data_tool:
+            tools.append(self.smart_data_tool)
         
         super().__init__(
             agent_id="medical_bill_agent",
@@ -79,6 +82,26 @@ class MedicalBillAgent(BaseAgent):
         )
         
         logger.info("Initialized MedicalBillAgent with all analysis tools")
+    
+    async def start(self):
+        await super().start()
+        await agent_registry.register_agent(
+            agent=self,
+            capabilities=AgentCapabilities(
+                supported_tasks=[
+                    TaskCapability.MEDICAL_ANALYSIS,
+                    TaskCapability.RATE_VALIDATION
+                ],
+                max_concurrent_requests=5,
+                preferred_model_hints=[ModelHint.STANDARD],
+                processing_time_ms_avg=500,
+                cost_per_request_rupees=10.0,
+                confidence_threshold=0.8,
+                supported_document_types=["medical_bill"],
+                supported_languages=["english"],
+            ),
+            health_endpoint=None
+        )
     
     async def process_task(self, context: AgentContext, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -96,52 +119,35 @@ class MedicalBillAgent(BaseAgent):
             span.set_attribute("user_id", context.user_id)
             
             try:
-                # Extract task parameters
-                file_content = task_data.get("file_content")
+                # Extract task parameters from the new data model
                 doc_id = task_data.get("doc_id", context.doc_id)
-                language = task_data.get("language", "english")
-                state_code = task_data.get("state_code")
-                insurance_type = task_data.get("insurance_type", "cghs")
-                file_format = task_data.get("file_format", "pdf")
+                state_code = task_data.get("metadata", {}).get("state_code")
+                insurance_type = task_data.get("metadata", {}).get("insurance_type", "cghs")
                 
-                # Validate required parameters
-                if not file_content:
-                    raise ValueError("file_content is required for medical bill analysis")
-                
-                # Decode base64 file content if provided as string
-                if isinstance(file_content, str):
-                    try:
-                        file_content = base64.b64decode(file_content)
-                    except Exception as e:
-                        raise ValueError(f"Invalid base64 file content: {str(e)}")
+                # Get pre-processed data from the enhanced router
+                raw_text = task_data.get("raw_text", "")
+                line_items = task_data.get("line_items", []) # Assuming router provides this
+                processing_stats = task_data.get("ocr_stats", {})
                 
                 logger.info(
-                    "Starting medical bill analysis",
+                    "Starting medical bill analysis with pre-processed data",
                     doc_id=doc_id,
-                    language=language,
                     state_code=state_code,
                     insurance_type=insurance_type,
-                    file_size=len(file_content)
+                    line_items_count=len(line_items)
                 )
-                
-                # Step 1: Document Processing
-                logger.info("Step 1: Processing document", doc_id=doc_id)
-                doc_result = await self.document_processor_tool(
-                    file_content=file_content,
-                    doc_id=doc_id,
-                    language=language,
-                    file_format=file_format
-                )
-                
-                if not doc_result.get("success"):
-                    return {
-                        "success": False,
-                        "error": f"Document processing failed: {doc_result.get('error', 'Unknown error')}",
-                        "step": "document_processing"
-                    }
-                
-                line_items = doc_result.get("line_items", [])
-                processing_stats = doc_result.get("processing_stats", {})
+
+                # If line items are not provided, use AI fallback
+                if not line_items:
+                    logger.info("No line items provided, using AI fallback analysis", doc_id=doc_id)
+                    ai_result = await self._ai_fallback_analysis(
+                        raw_text=raw_text,
+                        doc_id=doc_id,
+                        state_code=state_code,
+                        insurance_type=insurance_type,
+                        processing_stats=processing_stats
+                    )
+                    return ai_result
                 
                 if not line_items:
                     # Use AI fallback analysis when regex extraction fails
@@ -155,12 +161,25 @@ class MedicalBillAgent(BaseAgent):
                     )
                     return ai_result
                 
-                # Step 2: Rate Validation
-                logger.info("Step 2: Validating rates", doc_id=doc_id, items_count=len(line_items))
+                # Step 2: Dynamic Data Fetching (if available)
+                scraped_data = None
+                if self.smart_data_tool:
+                    logger.info("Step 2a: Fetching dynamic data", doc_id=doc_id)
+                    smart_data_result = await self.smart_data_tool(
+                        document_type="medical_bill",
+                        raw_text=raw_text,
+                        state_code=state_code
+                    )
+                    if smart_data_result.get("success"):
+                        scraped_data = smart_data_result.get("scraped_data")
+
+                # Step 2b: Rate Validation
+                logger.info("Step 2b: Validating rates", doc_id=doc_id, items_count=len(line_items))
                 rate_result = await self.rate_validator_tool(
                     line_items=line_items,
                     state_code=state_code,
-                    validation_sources=["cghs", "esi"]
+                    validation_sources=["cghs", "esi"],
+                    dynamic_data=scraped_data
                 )
                 
                 # Step 3: Duplicate Detection
@@ -190,7 +209,6 @@ class MedicalBillAgent(BaseAgent):
                 logger.info("Step 5: Calculating confidence", doc_id=doc_id, red_flags_count=len(all_red_flags))
                 confidence_result = await self.confidence_scorer_tool(
                     analysis_results={
-                        "document_processing": doc_result,
                         "rate_validation": rate_result,
                         "duplicate_detection": duplicate_result,
                         "prohibited_detection": prohibited_result
@@ -229,7 +247,6 @@ class MedicalBillAgent(BaseAgent):
                     "recommendations": recommendations,
                     
                     # Detailed results from each step
-                    "document_processing": doc_result,
                     "rate_validation": rate_result,
                     "duplicate_detection": duplicate_result,
                     "prohibited_detection": prohibited_result,
@@ -341,17 +358,17 @@ class MedicalBillAgent(BaseAgent):
             # AI prompt for medical bill analysis
             prompt = f"""
             You are a medical bill analysis expert. Analyze this OCR-extracted text from a medical bill and provide a detailed analysis.
-
+    
             OCR Text:
             {raw_text[:2000]}  # Limit to first 2000 chars to avoid token limits
-
+    
             Please analyze and extract:
             1. Line items (services, procedures, medicines) with amounts
             2. Total bill amount
             3. Potential overcharges (compare with typical CGHS/ESI rates)
             4. Suspicious items or duplicate charges
             5. Overall assessment of the bill
-
+    
             Return a JSON response with this structure:
             {{
                 "line_items": [
@@ -379,27 +396,36 @@ class MedicalBillAgent(BaseAgent):
                 "analysis_notes": "Detailed explanation of findings",
                 "recommendations": ["List of recommendations"]
             }}
-
+    
             State: {state_code or "Not specified"}
             Insurance Type: {insurance_type}
             """
-
+    
             response = await client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2000,
                 temperature=0.3
             )
-
+    
             # Parse AI response
             import json
             response_content = response.choices[0].message.content
             logger.info(f"AI response content: {response_content}", doc_id=doc_id)
-            
+        
             if not response_content or not response_content.strip():
                 logger.error("Empty response from OpenAI", doc_id=doc_id)
-                raise ValueError("Empty response from OpenAI")
-            
+                return {
+                    "line_items": [],
+                    "total_bill_amount": 0.0,
+                    "estimated_overcharge": 0.0,
+                    "red_flags": [],
+                    "verdict": "error",
+                    "confidence": 0.0,
+                    "analysis_notes": "AI response was empty. No analysis could be performed.",
+                    "recommendations": ["Try again later or check OpenAI API status."]
+                }
+        
             try:
                 ai_analysis = json.loads(response_content)
             except json.JSONDecodeError as e:
@@ -433,7 +459,16 @@ class MedicalBillAgent(BaseAgent):
                 
                 if not json_extracted:
                     logger.error("No valid JSON found in AI response", doc_id=doc_id)
-                    raise
+                    return {
+                        "line_items": [],
+                        "total_bill_amount": 0.0,
+                        "estimated_overcharge": 0.0,
+                        "red_flags": [],
+                        "verdict": "error",
+                        "confidence": 0.0,
+                        "analysis_notes": f"AI response could not be parsed as JSON. Raw response: {response_content[:300]}...",
+                        "recommendations": ["Try again later or check OpenAI API status."]
+                    }
             
             # Helper to safely convert to float
             def safe_float(val, default=0.0):
@@ -482,14 +517,14 @@ class MedicalBillAgent(BaseAgent):
                 }
             }
             
+            verdict = ai_analysis.get("verdict", "warning")
             logger.info(
                 "AI fallback analysis completed",
                 doc_id=doc_id,
-                verdict=result["verdict"],
-                total_amount=result["total_bill_amount"],
-                overcharge=result["total_overcharge"],
-                confidence=result["confidence_score"],
-                red_flags=len(result["red_flags"])
+                verdict=verdict,
+                total_overcharge=result.get("total_overcharge", 0.0),
+                confidence_score=result.get("confidence_score", 0.0),
+                red_flags_count=len(result.get("red_flags", []))
             )
             
             return result
@@ -545,4 +580,4 @@ class MedicalBillAgent(BaseAgent):
             ]
         })
         
-        return base_health 
+        return base_health

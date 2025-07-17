@@ -33,9 +33,9 @@
             </h1>
             <p class="text-gray-600 text-lg">AI-powered medical bill analysis and overcharge detection</p>
             <div class="mt-2 text-sm text-gray-500">
-                <span :class="isProduction ? 'text-green-600' : 'text-blue-600'" class="font-medium">
+                <span :class="apiEnv === 'production' ? 'text-green-600' : 'text-blue-600'" class="font-medium">
                     <i class="fas fa-server mr-1"></i>
-                    <span x-text="isProduction ? 'Production' : 'Development'"></span> Mode
+                    <span x-text="apiEnv === 'production' ? 'Production' : 'Development'"></span> Mode
                 </span>
                 <span class="mx-2">|</span>
                 <span x-text="apiUrl"></span>
@@ -51,11 +51,11 @@
                 </div>
                 <div class="flex items-center space-x-4">
                     <label class="flex items-center">
-                        <input type="radio" x-model="isProduction" :value="false" class="mr-2">
+                        <input type="radio" x-model="apiEnv" value="local" class="mr-2">
                         <span class="text-sm">Local (localhost:8001)</span>
                     </label>
                     <label class="flex items-center">
-                        <input type="radio" x-model="isProduction" :value="true" class="mr-2">
+                        <input type="radio" x-model="apiEnv" value="production" class="mr-2">
                         <span class="text-sm">Railway Production</span>
                     </label>
                 </div>
@@ -474,41 +474,67 @@
             <p class="text-red-700 mt-1" x-text="error"></p>
         </div>
 
-        <!-- Chat Interface -->
-        <div x-show="analysisResult" class="fixed bottom-6 right-6 z-50">
-            <!-- Chat Toggle Button -->
-            <button @click="toggleChat()" 
-                    class="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-200 transform hover:scale-105">
-                <i class="fas fa-comments text-xl"></i>
-            </button>
+        <!-- Chat Toggle Button (always visible) -->
+        <button @click="toggleChat()"
+                class="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-200 transform hover:scale-105 fixed bottom-6 right-6 z-60">
+            <i class="fas fa-comments text-2xl"></i>
+        </button>
 
-            <!-- Chat Window -->
-            <div x-show="showChat" 
-                 x-transition:enter="transition ease-out duration-300"
-                 x-transition:enter-start="opacity-0 transform scale-95"
-                 x-transition:enter-end="opacity-100 transform scale-100"
-                 x-transition:leave="transition ease-in duration-200"
-                 x-transition:leave-start="opacity-100 transform scale-100"
-                 x-transition:leave-end="opacity-0 transform scale-95"
-                 class="absolute bottom-16 right-0 w-80 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-                
-                <!-- Chat Header -->
-                <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
-                    <h3 class="font-semibold">Chat with Assistant</h3>
-                    <button @click="toggleChat()" class="text-white hover:text-gray-200">
+        <!-- Chat Window (with bill selection and chat context) -->
+        <div x-show="showChat" class="fixed bottom-6 right-6 w-full max-w-md z-50">
+            <div class="bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col h-[550px]">
+                <div class="flex items-center justify-between px-4 py-3 border-b">
+                    <h3 class="font-semibold text-lg text-blue-700">
+                        <i class="fas fa-comments mr-2"></i>Ask MedBillGuard
+                    </h3>
+                    <button @click="toggleChat()" class="text-gray-400 hover:text-gray-600">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-
+                <!-- Bill Selection for Chat Context -->
+                <div class="flex flex-row items-center px-4 py-2 border-b">
+                    <span class="font-medium text-gray-700 mr-2"><i class="fas fa-file-invoice mr-1"></i>Select Bill:</span>
+                    <select x-model="selectedBillId" @change="onBillSelect()" class="flex-1 p-2 border border-gray-300 rounded-md mr-2">
+                        <option value="" disabled>Select a bill...</option>
+                        <template x-for="bill in bills" :key="bill.doc_id">
+                            <option :value="bill.doc_id" x-text="bill.filename + ' | ₹' + (bill.total_bill_amount || 0) + ' | ' + (bill.created_at ? new Date(bill.created_at * 1000).toLocaleDateString() : '')"></option>
+                        </template>
+                    </select>
+                    <button @click="fetchBills()" class="ml-2 text-blue-600 hover:text-blue-800" title="Refresh bills list"><i class="fas fa-sync-alt"></i></button>
+                </div>
                 <!-- Chat Messages -->
-                <div class="h-64 overflow-y-auto p-4 bg-gray-50">
+                <div class="h-64 overflow-y-auto p-4 bg-gray-50 flex-1">
                     <div class="space-y-3">
                         <template x-for="message in chatMessages" :key="message.timestamp">
                             <div :class="message.role === 'user' ? 'text-right' : 'text-left'">
                                 <div :class="message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800'" 
                                      class="inline-block max-w-xs px-3 py-2 rounded-lg shadow-sm">
                                     <p class="text-sm whitespace-pre-wrap" x-text="message.content"></p>
-                                    <span class="text-xs opacity-75 mt-1 block" x-text="message.timestamp"></span>
+                                    <span class="text-xs opacity-75 mt-1 block" x-text="new Date(message.timestamp * 1000).toLocaleTimeString()"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <!-- Chat Input -->
+                <div class="p-4 border-t border-gray-200">
+                    <div class="flex space-x-2">
+                        <input type="text" 
+                               x-model="currentChatMessage"
+                               @keyup.enter="sendChatMessage()"
+                               placeholder="Ask about your medical bill..."
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <button @click="sendChatMessage()"
+                                :disabled="!currentChatMessage.trim() || isChatting"
+                                :class="!currentChatMessage.trim() || isChatting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'"
+                                class="px-4 py-2 text-white rounded-md transition-colors duration-200">
+                            <i class="fas fa-paper-plane" :class="isChatting ? 'fa-spinner fa-spin' : ''"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
                                 </div>
                             </div>
                         </template>
@@ -539,7 +565,7 @@
         function medBillAnalyzer() {
             return {
                 // Environment configuration
-                isProduction: true,
+                apiEnv: 'production', // or 'local'
                 
                 // API status
                 apiStatus: 'checking',
@@ -557,6 +583,10 @@
                 insuranceType: 'cghs',
                 docId: '',
                 userQuery: '',
+                
+                // Bill selection for chat context
+                bills: [],
+                selectedBillId: '',
                 
                 // Analysis
                 isAnalyzing: false,
@@ -576,17 +606,45 @@
                 isTestingEndpoint: false,
                 testResult: null,
 
+                // Fetch bills from backend
+                async fetchBills(autoSelectLatest = false) {
+                    try {
+                        const response = await fetch(`${this.apiUrl}/bills?user_id=dashboard-user`);
+                        if (response.ok) {
+                            const billsList = await response.json();
+                            // Sort bills by created_at descending
+                            this.bills = (billsList || []).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+                            if (autoSelectLatest && this.bills.length > 0) {
+                                this.selectedBillId = this.bills[0].doc_id;
+                                this.docId = this.selectedBillId;
+                            }
+                        } else {
+                            this.bills = [];
+                        }
+                    } catch (error) {
+                        this.bills = [];
+                    }
+                },
+
+                // Bill selection handler
+                onBillSelect() {
+                    this.docId = this.selectedBillId;
+                    // Optionally clear chat messages for new context
+                    // this.chatMessages = [];
+                },
+
                 get apiUrl() {
-                    return this.isProduction ? 
-                        'https://endearing-prosperity-production.up.railway.app' : 
-                        'http://localhost:8001';
+                    return this.apiEnv === 'production'
+                        ? 'https://endearing-prosperity-production.up.railway.app'
+                        : 'http://localhost:8001';
                 },
 
                 init() {
                     this.checkHealth();
                     this.checkAgents();
                     this.checkMetrics();
-                    this.docId = 'test-' + Math.random().toString(36).substr(2, 9);
+                    this.fetchBills();
+                    // Do not generate docId here; generate only on file upload
                 },
 
                 async checkHealth() {
@@ -699,7 +757,7 @@ TOTAL: Rs 1,500.00
                             file_format: 'txt'
                         };
                         
-                        const response = await fetch(`${this.apiUrl}/analyze-fallback`, {
+                        const response = await fetch(`${this.apiUrl}/analyze-enhanced`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -742,6 +800,11 @@ TOTAL: Rs 1,500.00
                         }
                         this.selectedFile = file;
                         this.error = null;
+                        // Generate a new docId for each new file
+                        this.docId = 'doc-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
+                        // Optionally, reset chat history for new document
+                        this.chatMessages = [];
+                        // After analysis completes, bills list will be refreshed and new bill auto-selected
                     }
                 },
 
@@ -768,7 +831,7 @@ TOTAL: Rs 1,500.00
                     this.chatMessages.push({
                         role: 'user',
                         content: userMessage,
-                        timestamp: new Date().toLocaleTimeString()
+                        timestamp: Date.now() / 1000
                     });
 
                     try {
@@ -790,13 +853,13 @@ TOTAL: Rs 1,500.00
                             this.chatMessages.push({
                                 role: 'assistant',
                                 content: chatResponse.message,
-                                timestamp: new Date().toLocaleTimeString()
+                                timestamp: Date.now() / 1000
                             });
                         } else {
                             this.chatMessages.push({
                                 role: 'assistant',
                                 content: 'Sorry, I\'m having trouble responding right now. Please try again.',
-                                timestamp: new Date().toLocaleTimeString()
+                                timestamp: Date.now() / 1000
                             });
                         }
                     } catch (error) {
@@ -804,7 +867,7 @@ TOTAL: Rs 1,500.00
                         this.chatMessages.push({
                             role: 'assistant',
                             content: 'Sorry, I\'m having trouble responding right now. Please try again.',
-                            timestamp: new Date().toLocaleTimeString()
+                            timestamp: Date.now() / 1000
                         });
                     } finally {
                         this.isChatting = false;
@@ -851,7 +914,7 @@ TOTAL: Rs 1,500.00
                             payload.query = this.userQuery.trim();
                         }
 
-                        const response = await fetch(`${this.apiUrl}/analyze-fallback`, {
+                        const response = await fetch(`${this.apiUrl}/analyze-enhanced`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -888,6 +951,8 @@ TOTAL: Rs 1,500.00
                                 documentType: debugData.documentType || docProcessing.document_type || fullResponse.document_type,
                                 extractionMethod: debugData.extractionMethod || docProcessing.extraction_method || 'regex'
                             };
+                            // Refresh the bills list and auto-select the new bill
+                            await this.fetchBills(true);
                         } else {
                             const errorData = await response.json();
                             throw new Error(errorData.detail || errorData.error || 'Analysis failed');

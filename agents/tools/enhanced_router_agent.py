@@ -18,7 +18,7 @@ Features:
 import asyncio
 import time
 from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
 import structlog
 from opentelemetry import trace
@@ -65,6 +65,12 @@ class DocumentProcessingResult:
     final_result: Dict[str, Any]
     total_processing_time_ms: int
     error: Optional[str] = None
+
+
+def _get_value(obj, key, default=None):
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
 
 
 class EnhancedRouterAgent(BaseAgent):
@@ -266,6 +272,9 @@ class EnhancedRouterAgent(BaseAgent):
                 processing_request=request
             )
             
+            if not isinstance(domain_result, dict):
+                domain_result = {"success": False, "error": "Domain agent returned non-dict result", "raw_result": str(domain_result)}
+            
             analysis_time = (time.time() - analysis_start) * 1000
             processing_stages[ProcessingStage.DOMAIN_ANALYSIS] = {
                 "result": domain_result,
@@ -379,13 +388,21 @@ class EnhancedRouterAgent(BaseAgent):
             
             # Make routing decision
             decision = await self.base_router.route_request(routing_request)
-            
+            decision_dict = asdict(decision)
+            # Restore agent_instance to each selected_agents dict
+            for i, agent_reg in enumerate(decision.selected_agents):
+                agent_dict = asdict(agent_reg)
+                if hasattr(agent_reg, "agent_instance"):
+                    agent_dict["agent_instance"] = agent_reg.agent_instance
+                else:
+                    agent_dict["agent_instance"] = None
+                decision_dict["selected_agents"][i] = agent_dict
             return {
                 "success": True,
-                "routing_decision": decision,
-                "selected_agent": decision.selected_agents[0].agent_id if decision.selected_agents else None,
-                "confidence": decision.confidence,
-                "reasoning": decision.reasoning
+                "routing_decision": decision_dict,
+                "selected_agent": decision_dict["selected_agents"][0]["agent_id"] if decision_dict["selected_agents"] else None,
+                "confidence": decision_dict["confidence"],
+                "reasoning": decision_dict["reasoning"]
             }
             
         except Exception as e:
@@ -414,7 +431,7 @@ class EnhancedRouterAgent(BaseAgent):
             # Get the selected agent from registry
             agent_registration = None
             for agent_reg in routing_decision.get("routing_decision", {}).get("selected_agents", []):
-                if agent_reg.agent_id == selected_agent_id:
+                if agent_reg["agent_id"] == selected_agent_id:
                     agent_registration = agent_reg
                     break
             
@@ -446,11 +463,14 @@ class EnhancedRouterAgent(BaseAgent):
                 user_id=processing_request.user_id,
                 correlation_id=f"enhanced_router_{processing_request.doc_id}",
                 model_hint=ModelHint.STANDARD,
-                start_time=time.time()
+                start_time=time.time(),
+                metadata=domain_task_data.get("metadata", {})
             )
             
             # Execute domain analysis
-            domain_result = await agent_registration.agent_instance.process_task(
+            if agent_registration["agent_instance"] is None:
+                raise Exception(f"Selected agent {selected_agent_id} is not available (no agent_instance attached)")
+            domain_result = await agent_registration["agent_instance"].process_task(
                 context=context,
                 task_data=domain_task_data
             )

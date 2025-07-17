@@ -134,6 +134,30 @@ class DocumentTypeClassifier:
         
         logger.info("Initialized DocumentTypeClassifier")
     
+    def _perform_heuristic_detection(self, raw_text: str, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Perform fast, heuristic-based document detection."""
+        content_lower = raw_text.lower()
+        filename = metadata.get("filename", "").lower()
+
+        # Medical bill indicators
+        medical_indicators = [
+            "medical", "hospital", "clinic", "doctor", "patient", "diagnosis",
+            "medicine", "prescription", "treatment", "bill", "invoice",
+            "cghs", "esi", "insurance", "medicare", "mediclaim"
+        ]
+
+        if any(indicator in content_lower or indicator in filename for indicator in medical_indicators):
+            return {
+                "success": True,
+                "document_type": DocumentType.MEDICAL_BILL.value,
+                "confidence": 0.9,
+                "required_capabilities": [RequiredCapability.MEDICAL_ANALYSIS.value, RequiredCapability.RATE_VALIDATION.value],
+                "suggested_agent": "medical_bill_agent",
+                "reasoning": "Heuristically detected based on common medical keywords.",
+                "metadata": {"detection_method": "heuristic"}
+            }
+        return None
+
     async def __call__(
         self,
         raw_text: str,
@@ -144,17 +168,17 @@ class DocumentTypeClassifier:
     ) -> Dict[str, Any]:
         """
         Classify document type and determine routing requirements.
-        
-        Args:
-            raw_text: Raw OCR extracted text
-            doc_id: Document identifier
-            pages: Optional page-by-page text breakdown
-            tables: Optional extracted tables data
-            metadata: Optional additional metadata
-            
-        Returns:
-            Classification result with routing information
+        Uses a fast heuristic check first, then falls back to LLM.
         """
+        # 1. Fast heuristic check
+        heuristic_result = self._perform_heuristic_detection(raw_text, metadata or {})
+        if heuristic_result:
+            logger.info("Document type detected heuristically", doc_id=doc_id)
+            return heuristic_result
+
+        # 2. Fallback to LLM-based classification
+        logger.info("Heuristic detection failed, falling back to LLM classification", doc_id=doc_id)
+        
         try:
             logger.info(
                 "Starting document classification",

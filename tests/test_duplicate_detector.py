@@ -13,8 +13,8 @@ from decimal import Decimal
 from unittest.mock import Mock
 
 from shared.tools.duplicate_detector import (
-    DuplicateDetector,
-    DuplicateGroup,
+    DuplicateDetector, 
+    DuplicateGroup, 
     DuplicateScore,
     DuplicateReason
 )

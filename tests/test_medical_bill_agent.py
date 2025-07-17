@@ -16,7 +16,6 @@ from typing import Dict, Any
 from agents.medical_bill_agent import MedicalBillAgent
 from agents.base_agent import AgentContext, ModelHint
 from agents.tools import (
-    DocumentProcessorTool,
     RateValidatorTool,
     DuplicateDetectorTool,
     ProhibitedDetectorTool,
@@ -94,81 +93,6 @@ def agent_context():
     )
 
 
-class TestDocumentProcessorTool:
-    """Test DocumentProcessorTool functionality."""
-    
-    @pytest.mark.asyncio
-    async def test_document_processing_success(self, sample_file_content):
-        """Test successful document processing."""
-        tool = DocumentProcessorTool()
-        
-        with patch.object(tool.processor, 'process_document') as mock_process:
-            # Mock successful processing
-            mock_result = MagicMock()
-            mock_result.raw_text = "Sample medical bill text"
-            mock_result.document_type.value = "hospital_bill"
-            mock_result.language.value = "english"
-            mock_result.line_items = [
-                MagicMock(
-                    description="Test Item",
-                    quantity=1,
-                    unit_price=100.0,
-                    total_amount=100.0,
-                    item_type=MagicMock(value="consultation"),
-                    confidence=0.9,
-                    source_method="table"
-                )
-            ]
-            mock_result.tables = []
-            mock_result.processing_stats = MagicMock(
-                pages_processed=1,
-                ocr_confidence=95.0,
-                text_extracted_chars=1000,
-                tables_found=0,
-                tables_extracted=0,
-                line_items_found=1,
-                processing_time_ms=500,
-                errors_encountered=[]
-            )
-            mock_result.metadata = {"test": "metadata"}
-            
-            mock_process.return_value = mock_result
-            
-            # Test the tool
-            file_content = base64.b64decode(sample_file_content)
-            result = await tool(
-                file_content=file_content,
-                doc_id="test_doc",
-                language="english",
-                file_format="pdf"
-            )
-            
-            assert result["success"] is True
-            assert result["doc_id"] == "test_doc"
-            assert len(result["line_items"]) == 1
-            assert result["line_items"][0]["description"] == "Test Item"
-            assert result["processing_stats"]["pages_processed"] == 1
-    
-    @pytest.mark.asyncio
-    async def test_document_processing_failure(self, sample_file_content):
-        """Test document processing failure handling."""
-        tool = DocumentProcessorTool()
-        
-        with patch.object(tool.processor, 'process_document') as mock_process:
-            mock_process.side_effect = Exception("OCR failed")
-            
-            file_content = base64.b64decode(sample_file_content)
-            result = await tool(
-                file_content=file_content,
-                doc_id="test_doc",
-                language="english"
-            )
-            
-            assert result["success"] is False
-            assert "OCR failed" in result["error"]
-            assert result["line_items"] == []
-
-
 class TestRateValidatorTool:
     """Test RateValidatorTool functionality."""
     
@@ -240,7 +164,6 @@ class TestMedicalBillAgent:
         assert agent.agent_id == "medical_bill_agent"
         assert agent.name == "Medical Bill Analysis Agent"
         assert len(agent.tools) == 5
-        assert isinstance(agent.document_processor_tool, DocumentProcessorTool)
         assert isinstance(agent.rate_validator_tool, RateValidatorTool)
         assert isinstance(agent.duplicate_detector_tool, DuplicateDetectorTool)
         assert isinstance(agent.prohibited_detector_tool, ProhibitedDetectorTool)
@@ -252,121 +175,110 @@ class TestMedicalBillAgent:
         agent = MedicalBillAgent()
         
         # Mock all tool responses
-        with patch.object(agent.document_processor_tool, '__call__') as mock_doc:
-            with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
-                with patch.object(agent.duplicate_detector_tool, '__call__') as mock_duplicate:
-                    with patch.object(agent.prohibited_detector_tool, '__call__') as mock_prohibited:
-                        with patch.object(agent.confidence_scorer_tool, '__call__') as mock_confidence:
+        with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
+            with patch.object(agent.duplicate_detector_tool, '__call__') as mock_duplicate:
+                with patch.object(agent.prohibited_detector_tool, '__call__') as mock_prohibited:
+                    with patch.object(agent.confidence_scorer_tool, '__call__') as mock_confidence:
                             
-                            # Mock document processing
-                            mock_doc.return_value = {
-                                "success": True,
-                                "doc_id": "test_bill_001",
-                                "line_items": sample_line_items,
-                                "processing_stats": sample_processing_stats,
-                                "raw_text": "Sample text",
-                                "document_type": "hospital_bill"
-                            }
-                            
-                            # Mock rate validation
-                            mock_rate.return_value = {
-                                "success": True,
-                                "rate_matches": [
-                                    {
-                                        "bill_item": "Specialist Consultation",
-                                        "overcharge_amount": 300.0,
-                                        "confidence": 0.95
-                                    }
-                                ],
-                                "red_flags": [
-                                    {
-                                        "type": "overcharge",
-                                        "severity": "high",
-                                        "item": "Specialist Consultation",
-                                        "overcharge_amount": 300.0,
-                                        "confidence": 0.95
-                                    }
-                                ],
-                                "validation_summary": {
-                                    "total_overcharge": 300.0
+                        # Mock rate validation
+                        mock_rate.return_value = {
+                            "success": True,
+                            "rate_matches": [
+                                {
+                                    "bill_item": "Specialist Consultation",
+                                    "overcharge_amount": 300.0,
+                                    "confidence": 0.95
                                 }
-                            }
-                            
-                            # Mock duplicate detection
-                            mock_duplicate.return_value = {
-                                "success": True,
-                                "duplicate_groups": [],
-                                "red_flags": [],
-                                "duplicate_summary": {
-                                    "total_duplicate_items": 0
+                            ],
+                            "red_flags": [
+                                {
+                                    "type": "overcharge",
+                                    "severity": "high",
+                                    "item": "Specialist Consultation",
+                                    "overcharge_amount": 300.0,
+                                    "confidence": 0.95
                                 }
+                            ],
+                            "validation_summary": {
+                                "total_overcharge": 300.0
                             }
+                        }
                             
-                            # Mock prohibited detection
-                            mock_prohibited.return_value = {
-                                "success": True,
-                                "prohibited_items": [],
-                                "red_flags": [],
-                                "prohibited_summary": {
-                                    "prohibited_items_found": 0
-                                }
+                        # Mock duplicate detection
+                        mock_duplicate.return_value = {
+                            "success": True,
+                            "duplicate_groups": [],
+                            "red_flags": [],
+                            "duplicate_summary": {
+                                "total_duplicate_items": 0
                             }
+                        }
                             
-                            # Mock confidence scoring
-                            mock_confidence.return_value = {
-                                "success": True,
-                                "overall_confidence": {
-                                    "score": 0.89,
-                                    "source": "hybrid",
-                                    "reasoning": "High confidence analysis"
-                                },
-                                "verdict": "warning",
-                                "recommendations": [
-                                    "Review flagged overcharges with hospital"
-                                ]
+                        # Mock prohibited detection
+                        mock_prohibited.return_value = {
+                            "success": True,
+                            "prohibited_items": [],
+                            "red_flags": [],
+                            "prohibited_summary": {
+                                "prohibited_items_found": 0
                             }
+                        }
                             
-                            # Test the complete workflow
-                            task_data = {
-                                "file_content": sample_file_content,
-                                "doc_id": "test_bill_001",
-                                "language": "english",
-                                "state_code": "DL",
-                                "insurance_type": "cghs",
-                                "file_format": "pdf"
-                            }
+                        # Mock confidence scoring
+                        mock_confidence.return_value = {
+                            "success": True,
+                            "overall_confidence": {
+                                "score": 0.89,
+                                "source": "hybrid",
+                                "reasoning": "High confidence analysis"
+                            },
+                            "verdict": "warning",
+                            "recommendations": [
+                                "Review flagged overcharges with hospital"
+                            ]
+                        }
                             
-                            result = await agent.process_task(agent_context, task_data)
+                        # Test the complete workflow
+                        task_data = {
+                            "file_content": sample_file_content,
+                            "doc_id": "test_bill_001",
+                            "language": "english",
+                            "state_code": "DL",
+                            "insurance_type": "cghs",
+                            "file_format": "pdf"
+                        }
                             
-                            assert result["success"] is True
-                            assert result["analysis_complete"] is True
-                            assert result["doc_id"] == "test_bill_001"
-                            assert result["verdict"] == "warning"
-                            assert result["total_bill_amount"] == 1850.0  # Sum of all line items
-                            assert result["total_overcharge"] == 300.0
-                            assert result["confidence_score"] == 0.89
-                            assert len(result["red_flags"]) == 1
-                            assert len(result["recommendations"]) == 1
+                        result = await agent.process_task(agent_context, task_data)
                             
-                            # Verify analysis summary
-                            summary = result["analysis_summary"]
-                            assert summary["items_analyzed"] == 3
-                            assert summary["rate_matches_found"] == 1
-                            assert summary["duplicates_detected"] == 0
-                            assert summary["prohibited_items_found"] == 0
-                            assert summary["total_red_flags"] == 1
-                            assert summary["state_validation_used"] is True
-                            assert summary["insurance_type"] == "cghs"
+                        assert result["success"] is True
+                        assert result["analysis_complete"] is True
+                        assert result["doc_id"] == "test_bill_001"
+                        assert result["verdict"] == "warning"
+                        assert result["total_bill_amount"] == 1850.0  # Sum of all line items
+                        assert result["total_overcharge"] == 300.0
+                        assert result["confidence_score"] == 0.89
+                        assert len(result["red_flags"]) == 1
+                        assert len(result["recommendations"]) == 1
+                            
+                        # Verify analysis summary
+                        summary = result["analysis_summary"]
+                        assert summary["items_analyzed"] == 3
+                        assert summary["rate_matches_found"] == 1
+                        assert summary["duplicates_detected"] == 0
+                        assert summary["prohibited_items_found"] == 0
+                        assert summary["total_red_flags"] == 1
+                        assert summary["state_validation_used"] is True
+                        assert summary["insurance_type"] == "cghs"
     
     @pytest.mark.asyncio
     async def test_process_task_document_processing_failure(self, agent_context, sample_file_content):
         """Test handling of document processing failure."""
         agent = MedicalBillAgent()
         
-        with patch.object(agent.document_processor_tool, '__call__') as mock_doc:
-            mock_doc.return_value = {
+        with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
+            mock_rate.return_value = {
                 "success": False,
-                "error": "OCR processing failed"
+                "error": "Rate validation failed"
             }
             
             task_data = {
@@ -377,18 +289,17 @@ class TestMedicalBillAgent:
             result = await agent.process_task(agent_context, task_data)
             
             assert result["success"] is False
-            assert "Document processing failed" in result["error"]
-            assert result["step"] == "document_processing"
+            assert "Rate validation failed" in result["error"]
+            assert result["step"] == "rate_validation"
     
     @pytest.mark.asyncio
     async def test_process_task_no_line_items(self, agent_context, sample_file_content, sample_processing_stats):
         """Test handling when no line items are found."""
         agent = MedicalBillAgent()
         
-        with patch.object(agent.document_processor_tool, '__call__') as mock_doc:
-            mock_doc.return_value = {
+        with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
+            mock_rate.return_value = {
                 "success": True,
-                "doc_id": "test_bill_001",
                 "line_items": [],  # No line items found
                 "processing_stats": sample_processing_stats
             }
@@ -492,7 +403,6 @@ class TestMedicalBillAgent:
             assert health["name"] == "Medical Bill Analysis Agent"
             assert "tools" in health
             assert len(health["analysis_capabilities"]) == 6
-            assert "document_processing" in health["analysis_capabilities"]
             assert "rate_validation" in health["analysis_capabilities"]
 
 
@@ -504,9 +414,9 @@ class TestToolIntegration:
         """Test that tool errors are properly handled and propagated."""
         agent = MedicalBillAgent()
         
-        with patch.object(agent.document_processor_tool, '__call__') as mock_doc:
+        with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
             # Simulate tool raising an exception
-            mock_doc.side_effect = Exception("Tool execution failed")
+            mock_rate.side_effect = Exception("Tool execution failed")
             
             task_data = {
                 "file_content": sample_file_content,
@@ -524,56 +434,48 @@ class TestToolIntegration:
         """Test handling when some tools fail but others succeed."""
         agent = MedicalBillAgent()
         
-        with patch.object(agent.document_processor_tool, '__call__') as mock_doc:
-            with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
-                with patch.object(agent.duplicate_detector_tool, '__call__') as mock_duplicate:
-                    with patch.object(agent.prohibited_detector_tool, '__call__') as mock_prohibited:
-                        with patch.object(agent.confidence_scorer_tool, '__call__') as mock_confidence:
+        with patch.object(agent.rate_validator_tool, '__call__') as mock_rate:
+            with patch.object(agent.duplicate_detector_tool, '__call__') as mock_duplicate:
+                with patch.object(agent.prohibited_detector_tool, '__call__') as mock_prohibited:
+                    with patch.object(agent.confidence_scorer_tool, '__call__') as mock_confidence:
                             
-                            # Document processing succeeds
-                            mock_doc.return_value = {
-                                "success": True,
-                                "line_items": sample_line_items,
-                                "processing_stats": sample_processing_stats
-                            }
+                        # Rate validation fails
+                        mock_rate.return_value = {
+                            "success": False,
+                            "error": "Rate validation failed",
+                            "red_flags": []
+                        }
                             
-                            # Rate validation fails
-                            mock_rate.return_value = {
-                                "success": False,
-                                "error": "Rate validation failed",
-                                "red_flags": []
-                            }
+                        # Other tools succeed with empty results
+                        mock_duplicate.return_value = {
+                            "success": True,
+                            "red_flags": [],
+                            "duplicate_summary": {"total_duplicate_items": 0}
+                        }
                             
-                            # Other tools succeed with empty results
-                            mock_duplicate.return_value = {
-                                "success": True,
-                                "red_flags": [],
-                                "duplicate_summary": {"total_duplicate_items": 0}
-                            }
+                        mock_prohibited.return_value = {
+                            "success": True,
+                            "red_flags": [],
+                            "prohibited_summary": {"prohibited_items_found": 0}
+                        }
                             
-                            mock_prohibited.return_value = {
-                                "success": True,
-                                "red_flags": [],
-                                "prohibited_summary": {"prohibited_items_found": 0}
-                            }
+                        mock_confidence.return_value = {
+                            "success": True,
+                            "overall_confidence": {"score": 0.8},
+                            "verdict": "ok",
+                            "recommendations": []
+                        }
                             
-                            mock_confidence.return_value = {
-                                "success": True,
-                                "overall_confidence": {"score": 0.8},
-                                "verdict": "ok",
-                                "recommendations": []
-                            }
+                        task_data = {
+                            "file_content": sample_file_content,
+                            "doc_id": "test_bill_001"
+                        }
                             
-                            task_data = {
-                                "file_content": sample_file_content,
-                                "doc_id": "test_bill_001"
-                            }
+                        result = await agent.process_task(agent_context, task_data)
                             
-                            result = await agent.process_task(agent_context, task_data)
+                        # Analysis should still complete successfully
+                        assert result["success"] is True
+                        assert result["analysis_complete"] is True
                             
-                            # Analysis should still complete successfully
-                            assert result["success"] is True
-                            assert result["analysis_complete"] is True
-                            
-                            # Should handle failed rate validation gracefully
-                            assert result["analysis_summary"]["rate_matches_found"] == 0 
+                        # Should handle failed rate validation gracefully
+                        assert result["analysis_summary"]["rate_matches_found"] == 0 

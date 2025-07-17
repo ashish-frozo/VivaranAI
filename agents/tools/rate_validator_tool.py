@@ -43,7 +43,8 @@ class RateValidatorTool:
         self,
         line_items: List[Dict[str, Any]],
         state_code: Optional[str] = None,
-        validation_sources: List[str] = None
+        validation_sources: List[str] = None,
+        dynamic_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Validate medical charges against reference rates.
@@ -90,7 +91,7 @@ class RateValidatorTool:
             
             # Validate rates
             rate_matches = await self.validator.validate_item_rates(
-                items, item_costs, state_code=state_code
+                items, item_costs, state_code=state_code, dynamic_data=dynamic_data
             )
             
             # Generate red flags from rate matches

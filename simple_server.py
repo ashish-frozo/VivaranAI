@@ -10,12 +10,22 @@ import logging
 import time
 import base64
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from database.models import get_async_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 import os
 import sys
+
+# --- Load environment variables from .env if present ---
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print('Loaded OPENAI_API_KEY:', os.environ.get('OPENAI_API_KEY'))
+except ImportError:
+    print('⚠️  python-dotenv not installed. Install with: pip install python-dotenv')
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -63,6 +73,36 @@ app.add_middleware(
 )
 
 # Request/Response models
+
+class ChatRequest(BaseModel):
+    user_id: str
+    doc_id: str = None  # Optional: if not provided, use most recent bill
+    message: str
+    conversation_history: Optional[list] = []
+
+class ChatResponse(BaseModel):
+    success: bool
+    doc_id: str
+    message: str
+    timestamp: float
+
+
+from typing import List
+from pydantic import BaseModel
+
+class BillSummary(BaseModel):
+    doc_id: str
+    filename: str
+    created_at: str
+    status: str
+    analysis_type: str
+    total_amount: float = 0
+    suspected_overcharges: float = 0
+    confidence_level: float = 0
+
+class BillsListResponse(BaseModel):
+    bills: List[BillSummary]
+
 class AnalysisRequest(BaseModel):
     file_content: str  # Base64 encoded
     filename: str
@@ -260,8 +300,296 @@ async def analyze_medical_bill(request: AnalysisRequest):
             error=str(e)
         )
 
+from database.bill_chat_context import save_bill_analysis, get_user_bills, get_bill_by_id
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_bill_context(request: ChatRequest, db: AsyncSession = Depends(get_async_db)):
+    """
+    Chat with the assistant about a bill. If doc_id is omitted, use most recent bill.
+    """
+    # Determine which bill to use for context
+    bill = None
+    if request.doc_id:
+        bill = await get_bill_by_id(db, request.doc_id)
+    else:
+        bills = await get_user_bills(db, user_id=request.user_id, limit=1)
+        bill = bills[0] if bills else None
+    if not bill:
+        return ChatResponse(success=False, doc_id=request.doc_id or '', message="No bill found for context.", timestamp=time.time())
+
+    # Extract bill information for context
+    bill_info = getattr(bill, 'raw_analysis', None) or {}
+    structured_results = getattr(bill, 'structured_results', None) or {}
+    
+    # Get bill amount from multiple possible locations
+    bill_amount = 0
+    for attr_name in ['total_amount', 'total_bill_amount']:
+        amount = getattr(bill, attr_name, None)
+        if amount:
+            if isinstance(amount, str):
+                try:
+                    bill_amount = float(amount)
+                    break
+                except (ValueError, TypeError):
+                    pass
+            else:
+                bill_amount = amount
+                break
+    
+    # If still no amount, try to get it from structured results
+    if bill_amount == 0 and structured_results:
+        if isinstance(structured_results, str):
+            try:
+                structured_results = json.loads(structured_results)
+            except json.JSONDecodeError:
+                structured_results = {}
+        bill_amount = structured_results.get('total_amount', 0) or structured_results.get('total_bill_amount', 0)
+    
+    # Create a detailed bill summary for context
+    bill_summary = f"Bill: {bill.filename}, Amount: ₹{bill_amount}, Status: {bill.status}"
+    
+    # Add detailed bill information if available
+    bill_details = ""
+    
+    # Process raw_analysis for detailed information
+    if bill_info:
+        # Handle string serialization if needed
+        if isinstance(bill_info, str):
+            try:
+                bill_info = json.loads(bill_info)
+            except json.JSONDecodeError:
+                bill_info = {"error": "Could not parse bill info"}
+        
+        # Look for line items in multiple possible locations
+        line_items = []
+        
+        # Check in raw_analysis directly
+        if isinstance(bill_info, dict):
+            line_items = bill_info.get('line_items', [])
+            
+            # Check in final_result if present
+            if not line_items and 'final_result' in bill_info:
+                final_result = bill_info.get('final_result', {})
+                line_items = final_result.get('line_items', [])
+            
+            # Check in processing_stages if present
+            if not line_items and 'processing_stages' in bill_info:
+                processing_stages = bill_info.get('processing_stages', {})
+                domain_analysis = processing_stages.get('domain_analysis', {})
+                if domain_analysis:
+                    line_items = domain_analysis.get('line_items', [])
+            
+            # Check in debug_line_items if present
+            if not line_items and 'debug_line_items' in bill_info:
+                line_items = bill_info.get('debug_line_items', [])
+            
+            # Check in results if present
+            if not line_items and 'results' in bill_info:
+                results = bill_info.get('results', {})
+                line_items = results.get('line_items', []) or results.get('debug_line_items', [])
+        
+        # Format line items if found
+        if line_items:
+            bill_details += "\n\nLine Items/Medicines:\n"
+            for i, item in enumerate(line_items, 1):
+                if isinstance(item, dict):
+                    name = item.get('description', '') or item.get('name', '') or item.get('item_name', '') or "Unknown item"
+                    qty = item.get('quantity', 1)
+                    price = item.get('price', 0) or item.get('total_amount', 0) or item.get('amount', 0)
+                    bill_details += f"{i}. {name} - Qty: {qty}, Price: ₹{price}\n"
+        
+        # If no line items found, try to extract from OCR text
+        if not line_items:
+            ocr_text = ""
+            # Try to find OCR text in various locations
+            if isinstance(bill_info, dict):
+                # Check direct locations
+                ocr_text = bill_info.get('raw_text', '') or bill_info.get('text', '')
+                
+                # Check in processing_stages
+                if not ocr_text and 'processing_stages' in bill_info:
+                    stages = bill_info.get('processing_stages', {})
+                    ocr_extraction = stages.get('ocr_extraction', {})
+                    ocr_text = ocr_extraction.get('raw_text', '')
+                
+                # Check in results
+                if not ocr_text and 'results' in bill_info:
+                    results = bill_info.get('results', {})
+                    ocr_text = results.get('debug_ocr_text', '') or results.get('raw_text', '')
+            
+            if ocr_text:
+                # Add a sample of the OCR text to provide context
+                bill_details += "\n\nExtracted Text Sample:\n"
+                # Take first 300 chars as a sample
+                text_sample = ocr_text[:300] + "..." if len(ocr_text) > 300 else ocr_text
+                bill_details += text_sample
+    
+    # Send to OpenAI for processing
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        
+        # Create prompt with bill context including full AI analysis
+        
+        # Add AI analysis results if available
+        ai_analysis = ""
+        medicines_list = ""
+        
+        # First, try to extract medicines from structured_results
+        if structured_results:
+            if isinstance(structured_results, str):
+                try:
+                    structured_results = json.loads(structured_results)
+                except json.JSONDecodeError:
+                    structured_results = {}
+            
+            # Look for line_items in structured_results (from AI analysis)
+            line_items = structured_results.get('line_items', [])
+            if not line_items:
+                # Also check for line_items in raw_analysis
+                if isinstance(bill_info, dict):
+                    # Try to find AI analysis response in raw_analysis
+                    ai_response = None
+                    
+                    # Check for AI response in domain_analysis
+                    if 'processing_stages' in bill_info:
+                        stages = bill_info.get('processing_stages', {})
+                        domain_analysis = stages.get('domain_analysis', {})
+                        ai_response = domain_analysis.get('ai_response', None)
+                    
+                    # Check for AI response directly in raw_analysis
+                    if not ai_response:
+                        ai_response = bill_info.get('ai_response', None)
+                    
+                    # Check in final_result
+                    if not ai_response and 'final_result' in bill_info:
+                        final_result = bill_info.get('final_result', {})
+                        ai_response = final_result.get('ai_response', None)
+                    
+                    # If we found an AI response, try to parse it
+                    if ai_response:
+                        if isinstance(ai_response, str):
+                            try:
+                                ai_response = json.loads(ai_response)
+                            except json.JSONDecodeError:
+                                ai_response = {}
+                        
+                        if isinstance(ai_response, dict):
+                            line_items = ai_response.get('line_items', [])
+            
+            # If we found line_items, format them for the medicines list
+            if line_items:
+                medicines_list = "\n\nMedicines/Items in this bill:\n"
+                for i, item in enumerate(line_items, 1):
+                    if isinstance(item, dict):
+                        name = item.get('description', '') or item.get('name', '') or "Unknown item"
+                        qty = item.get('quantity', 1)
+                        price = item.get('amount', 0) or item.get('price', 0) or item.get('total_amount', 0)
+                        medicines_list += f"{i}. {name} - Qty: {qty}, Price: ₹{price}\n"
+            
+            # Format the AI analysis results
+            ai_analysis += "\n\nAI Analysis Results:\n"
+            
+            # Add verdict if available
+            verdict = structured_results.get('verdict', '')
+            if verdict:
+                ai_analysis += f"Verdict: {verdict}\n"
+            
+            # Add overcharge information if available
+            overcharge = structured_results.get('total_overcharge', 0) or structured_results.get('estimated_overcharge', 0)
+            if overcharge:
+                ai_analysis += f"Suspected Overcharge: ₹{overcharge}\n"
+            
+            # Add confidence score if available
+            confidence = structured_results.get('confidence_score', 0) or structured_results.get('confidence', 0)
+            if confidence:
+                ai_analysis += f"Confidence Score: {confidence:.2f}\n"
+            
+            # Add analysis notes if available
+            notes = structured_results.get('analysis_notes', '')
+            if notes:
+                ai_analysis += f"\nAnalysis Notes: {notes}\n"
+            
+            # Add red flags if available
+            red_flags = structured_results.get('red_flags', [])
+            if red_flags:
+                ai_analysis += "\nRed Flags:\n"
+                for i, flag in enumerate(red_flags, 1):
+                    ai_analysis += f"{i}. {flag}\n"
+            
+            # Add recommendations if available
+            recommendations = structured_results.get('recommendations', [])
+            if recommendations:
+                ai_analysis += "\nRecommendations:\n"
+                for i, rec in enumerate(recommendations, 1):
+                    ai_analysis += f"{i}. {rec}\n"
+            
+            # Add detailed line item analysis if available
+            line_item_analysis = structured_results.get('line_item_analysis', [])
+            if line_item_analysis:
+                ai_analysis += "\nLine Item Analysis:\n"
+                for i, item in enumerate(line_item_analysis, 1):
+                    if isinstance(item, dict):
+                        name = item.get('description', '') or item.get('name', '') or "Item"
+                        status = item.get('status', '') or item.get('issue', '')
+                        reason = item.get('reason', '') or item.get('details', '')
+                        ai_analysis += f"{i}. {name}: {status} - {reason}\n"
+        
+        # Create the full prompt with all available context
+        prompt = f"""You are a helpful medical bill assistant. The user is asking about their medical bill.\n\n
+            Bill Summary: {bill_summary}\n{medicines_list}\n{bill_details}\n{ai_analysis}\n\n
+            User Question: {request.message}\n\n
+            Please provide a helpful response about this medical bill, addressing the user's question directly.
+            If you don't know something specific, be honest about it.
+            Focus on answering the specific question asked by the user using the information provided.
+            When asked about medicines or items in the bill, always refer to the Medicines/Items section if available."""
+        
+        # Log the prompt for debugging
+        logger.info(f"Chat prompt for bill {bill.id}: {prompt[:200]}...")
+        
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # Use a faster model for chat to reduce latency
+            messages=[
+                {"role": "system", "content": "You are a helpful medical bill assistant that provides accurate information about medical bills. Answer questions directly and concisely based on the bill information provided."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        # Extract response
+        assistant_message = response.choices[0].message.content
+        
+    except Exception as e:
+        logger.error(f"Error calling OpenAI API: {e}")
+        # Fallback response if API call fails
+        assistant_message = f"I'm sorry, I couldn't process your question about the bill due to a technical issue. Here's what I know about your bill: {bill_summary}"
+
+    return ChatResponse(success=True, doc_id=str(bill.id), message=assistant_message, timestamp=time.time())
+
+@app.get("/bills", response_model=BillsListResponse)
+async def list_user_bills(user_id: str, db: AsyncSession = Depends(get_async_db)):
+    """
+    List all bill analyses for a user (summarized).
+    """
+    bills = await get_user_bills(db, user_id=user_id, limit=50)
+    summaries = []
+    for bill in bills:
+        summaries.append(BillSummary(
+            doc_id=str(bill.id),
+            filename=bill.filename,
+            created_at=bill.created_at if isinstance(bill.created_at, str) else bill.created_at.isoformat() if bill.created_at else "",
+            status=bill.status,
+            analysis_type=bill.analysis_type,
+            total_amount=float(bill.total_amount or 0),
+            suspected_overcharges=float(bill.suspected_overcharges or 0),
+            confidence_level=float(bill.confidence_level or 0)
+        ))
+    return BillsListResponse(bills=summaries)
+
 @app.post("/analyze-enhanced", response_model=EnhancedAnalysisResponse)
-async def analyze_document_enhanced(request: EnhancedAnalysisRequest):
+async def analyze_document_enhanced(request: EnhancedAnalysisRequest, db: AsyncSession = Depends(get_async_db)):
     """
     Enhanced document analysis using Generic OCR + Document Classification + Smart Routing.
     
@@ -343,15 +671,30 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest):
             
             # Route to medical bill agent for medical documents
             try:
-                medical_result = await agent.analyze_medical_bill(
-                    file_content=file_bytes,
+                # Build task_data for the agent with pre-processed OCR and classification results
+                task_data = {
+                    "doc_id": request.doc_id,
+                    "user_id": request.user_id,
+                    "raw_text": ocr_result.get("raw_text", ""),
+                    "line_items": [],  # You may add line item extraction logic if available
+                    "ocr_stats": ocr_result.get("processing_stats", {}),
+                    "metadata": {
+                        "state_code": None,
+                        "insurance_type": "cghs"
+                    },
+                    "file_format": request.file_format,
+                    "language": request.language
+                }
+                from agents.base_agent import AgentContext
+                context = AgentContext(
                     doc_id=request.doc_id,
                     user_id=request.user_id,
-                    language=request.language,
-                    state_code=None,
-                    insurance_type="cghs",
-                    file_format=request.file_format
+                    correlation_id=f"medical_bill_{request.doc_id}",
+                    model_hint=None,
+                    start_time=time.time(),
+                    metadata={"task_type": "medical_bill_analysis"}
                 )
+                medical_result = await agent.process_task(context, task_data=task_data)
                 
                 domain_stage = {
                     "success": medical_result.get("success", False),
@@ -398,7 +741,31 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest):
             final_result=final_result,
             total_processing_time_ms=processing_time
         )
-        
+
+        # Persist analysis result to DB
+        try:
+            # Compute file_hash, file_size, content_type for persistence (mocked for now)
+            file_hash = "mocked_hash"  # TODO: Compute real hash if needed
+            file_size = len(file_bytes)
+            content_type = request.file_format or "application/octet-stream"
+            analysis_type = classification_result.get("document_type", "medical_bill")
+            await save_bill_analysis(
+                session=db,
+                user_id=request.user_id,
+                doc_id=request.doc_id,
+                filename=getattr(request, 'filename', f"doc_{request.doc_id}"),
+                file_hash=file_hash,
+                file_size=file_size,
+                content_type=content_type,
+                analysis_type=analysis_type,
+                raw_analysis=response.dict(),
+                structured_results=final_result,
+                status="completed"
+            )
+            logger.info(f"✅ Bill analysis persisted to DB for doc_id={request.doc_id}")
+        except Exception as db_exc:
+            logger.error(f"❌ Failed to persist bill analysis to DB: {db_exc}")
+
         return response
         
     except HTTPException:
@@ -451,6 +818,26 @@ if __name__ == "__main__":
         print("   3. Run the server again")
         sys.exit(1)
     
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app = FastAPI(title="VivaranAI MedBillGuardAgent Simple Server")
+
+    # Allow CORS for local frontend and production dashboard
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "https://endearing-prosperity-production.up.railway.app",
+            "*"
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     print("🚀 Starting MedBillGuardAgent Simple Server")
     print("=" * 50)
     print(f"📱 Frontend: http://localhost:8000/dashboard.html")

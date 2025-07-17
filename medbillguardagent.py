@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse, Response
 import structlog
 
 from shared.schemas.schemas import (
-    MedBillGuardResponse, 
+    MedBillGuardResponse,
     LineItem, 
     RedFlag, 
     Verdict, 

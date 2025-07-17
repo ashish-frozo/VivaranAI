@@ -1,0 +1,206 @@
+"""
+Database utility functions for chat context and bill analysis persistence.
+"""
+
+import uuid
+import logging
+from typing import Dict, Any, List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.models import BillAnalysis, BillAnalysisRepository
+
+# In-memory storage fallback when database is not available
+_in_memory_bills = {}
+logger = logging.getLogger(__name__)
+
+async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, filename: str, file_hash: str, file_size: int, content_type: str, analysis_type: str, raw_analysis: Dict[str, Any], structured_results: Dict[str, Any], status: str = "completed") -> BillAnalysis:
+    # Handle non-UUID format strings by generating new UUIDs if needed
+    try:
+        id_uuid = uuid.UUID(doc_id)
+    except ValueError:
+        # If doc_id is not a valid UUID format, generate a new one based on the string
+        id_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, doc_id)
+    
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        # If user_id is not a valid UUID format, generate a new one based on the string
+        user_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
+    
+    # Convert UUIDs to strings for consistent dictionary keys
+    id_str = str(id_uuid)
+    user_id_str = str(user_uuid)
+    
+    try:
+        # Try to use the database first
+        repo = BillAnalysisRepository(session)
+        analysis_data = {
+            "id": id_uuid,
+            "user_id": user_uuid,
+            "filename": filename,
+            "file_hash": file_hash,
+            "file_size": file_size,
+            "content_type": content_type,
+            "analysis_type": analysis_type,
+            "status": status,
+            "raw_analysis": raw_analysis,
+            "structured_results": structured_results,
+        }
+        return await repo.create_analysis(analysis_data)
+    except Exception as e:
+        # Fallback to in-memory storage if database fails
+        logger.warning(f"Database operation failed, using in-memory fallback: {e}")
+        
+        # Initialize user's bills list if not exists
+        if user_id_str not in _in_memory_bills:
+            _in_memory_bills[user_id_str] = {}
+        
+        # Create a timestamp for created_at
+        import datetime
+        now = datetime.datetime.now().isoformat()
+        
+        # Store the bill analysis in memory
+        bill_data = {
+            "id": id_str,
+            "user_id": user_id_str,
+            "filename": filename,
+            "file_hash": file_hash,
+            "file_size": file_size,
+            "content_type": content_type,
+            "analysis_type": analysis_type,
+            "status": status,
+            "raw_analysis": raw_analysis,
+            "structured_results": structured_results,
+            "created_at": now
+        }
+        
+        # Debug log the raw_analysis and structured_results
+        logger.debug(f"Saving bill analysis for doc_id={id_str}")
+        logger.debug(f"raw_analysis type: {type(raw_analysis)}")
+        logger.debug(f"structured_results type: {type(structured_results)}")
+        
+        if isinstance(raw_analysis, dict):
+            logger.debug(f"raw_analysis keys: {list(raw_analysis.keys())}")
+            if 'final_result' in raw_analysis:
+                logger.debug(f"final_result keys: {list(raw_analysis['final_result'].keys())}")
+        
+        if isinstance(structured_results, dict):
+            logger.debug(f"structured_results keys: {list(structured_results.keys())}")
+        
+        _in_memory_bills[user_id_str][id_str] = bill_data
+        
+        # Create a mock BillAnalysis object
+        mock_analysis = type('BillAnalysis', (), bill_data)
+        return mock_analysis
+
+async def get_user_bills(session: AsyncSession, user_id: str, limit: int = 50) -> List[BillAnalysis]:
+    # Handle non-UUID format strings by generating a UUID if needed
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        # If user_id is not a valid UUID format, generate a new one based on the string
+        user_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
+    
+    user_id_str = str(user_uuid)
+    
+    try:
+        # Try to use the database first
+        repo = BillAnalysisRepository(session)
+        return await repo.get_user_analyses(user_uuid, limit=limit)
+    except Exception as e:
+        # Fallback to in-memory storage if database fails
+        logger.warning(f"Database operation failed, using in-memory fallback: {e}")
+        
+        # Return empty list if user has no bills
+        if user_id_str not in _in_memory_bills:
+            return []
+        
+        # Convert in-memory bills to BillAnalysis objects
+        bills = []
+        for bill_id, bill_data in list(_in_memory_bills[user_id_str].items())[:limit]:
+            # Ensure all required attributes exist
+            required_attrs = {
+                'id': bill_id,
+                'filename': bill_data.get('filename', 'unknown.pdf'),
+                'created_at': bill_data.get('created_at', ''),
+                'status': bill_data.get('status', 'completed'),
+                'analysis_type': bill_data.get('analysis_type', 'medical'),
+                'total_amount': bill_data.get('total_amount', 0),
+                'suspected_overcharges': bill_data.get('suspected_overcharges', 0),
+                'confidence_level': bill_data.get('confidence_level', 0)
+            }
+            
+            # Create a mock BillAnalysis object with all required attributes
+            mock_bill = type('BillAnalysis', (), {**bill_data, **required_attrs})
+            bills.append(mock_bill)
+        
+        return bills
+
+async def get_bill_by_id(session: AsyncSession, doc_id: str) -> Optional[BillAnalysis]:
+    # Handle non-UUID format strings by generating a UUID if needed
+    try:
+        id_uuid = uuid.UUID(doc_id)
+    except ValueError:
+        # If doc_id is not a valid UUID format, generate a new one based on the string
+        id_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, doc_id)
+    
+    id_str = str(id_uuid)
+    
+    try:
+        # Try to use the database first
+        repo = BillAnalysisRepository(session)
+        return await repo.get_analysis_by_id(id_uuid)
+    except Exception as e:
+        # Fallback to in-memory storage if database fails
+        logger.warning(f"Database operation failed, using in-memory fallback: {e}")
+        
+        # Search for the bill in all users' bills
+        for user_id, user_bills in _in_memory_bills.items():
+            if id_str in user_bills:
+                bill_data = user_bills[id_str]
+                # Debug log the retrieved bill data
+                logger.debug(f"Retrieved bill data for doc_id={id_str}")
+                logger.debug(f"bill_data keys: {list(bill_data.keys())}")
+                
+                if 'raw_analysis' in bill_data:
+                    raw_analysis = bill_data['raw_analysis']
+                    logger.debug(f"raw_analysis type: {type(raw_analysis)}")
+                    if isinstance(raw_analysis, dict):
+                        logger.debug(f"raw_analysis keys: {list(raw_analysis.keys())}")
+                        
+                        # Check for line items in various locations
+                        if 'final_result' in raw_analysis:
+                            logger.debug(f"final_result keys: {list(raw_analysis['final_result'].keys())}")
+                            
+                        if 'results' in raw_analysis:
+                            results = raw_analysis['results']
+                            if isinstance(results, dict):
+                                logger.debug(f"results keys: {list(results.keys())}")
+                                if 'debug_line_items' in results:
+                                    logger.debug(f"Found {len(results['debug_line_items'])} debug_line_items")
+                
+                if 'structured_results' in bill_data:
+                    structured_results = bill_data['structured_results']
+                    logger.debug(f"structured_results type: {type(structured_results)}")
+                    if isinstance(structured_results, dict):
+                        logger.debug(f"structured_results keys: {list(structured_results.keys())}")
+                        if 'line_items' in structured_results:
+                            logger.debug(f"Found {len(structured_results['line_items'])} line_items in structured_results")
+                
+                # Ensure all required attributes exist
+                required_attrs = {
+                    'id': id_str,
+                    'filename': bill_data.get('filename', 'unknown.pdf'),
+                    'created_at': bill_data.get('created_at', ''),
+                    'status': bill_data.get('status', 'completed'),
+                    'analysis_type': bill_data.get('analysis_type', 'medical'),
+                    'total_amount': bill_data.get('total_amount', 0),
+                    'suspected_overcharges': bill_data.get('suspected_overcharges', 0),
+                    'confidence_level': bill_data.get('confidence_level', 0)
+                }
+                
+                # Create a mock BillAnalysis object with all required attributes
+                return type('BillAnalysis', (), {**bill_data, **required_attrs})
+        
+        # Bill not found
+        return None

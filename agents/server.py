@@ -32,12 +32,12 @@ from config.env_config import config, check_required_config
 
 # Import agent-related components
 from agents.medical_bill_agent import MedicalBillAgent
-from agents.agent_registry import AgentRegistry, TaskCapability, AgentCapabilities
+from agents.agent_registry import AgentRegistry, TaskCapability, AgentCapabilities, AgentStatus
 from agents.base_agent import ModelHint, AgentContext
 from agents.router_agent import RouterAgent, RoutingStrategy, RoutingRequest
 from agents.redis_state import RedisStateManager
 from agents.tools.enhanced_router_agent import EnhancedRouterAgent
-from agents.simple_router import SimpleDocumentRouter, DocumentType
+# from agents.simple_router import SimpleDocumentRouter, DocumentType  # Removed, file deleted
 from security.oauth2_endpoints import oauth2_router
 from security.auth_middleware import auth_manager
 
@@ -122,7 +122,7 @@ async def ensure_agent_registration():
                 return False
                 
             app_state["medical_agent"] = MedicalBillAgent(
-                redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/1"),
+                redis_url=config.redis_url,
                 openai_api_key=openai_api_key
             )
         
@@ -135,19 +135,19 @@ async def ensure_agent_registration():
             # Create capabilities for medical agent
             capabilities = AgentCapabilities(
                 supported_tasks=[
-                    TaskCapability.DOCUMENT_PROCESSING,
+                    TaskCapability.MEDICAL_ANALYSIS,
                     TaskCapability.RATE_VALIDATION,
                     TaskCapability.DUPLICATE_DETECTION,
                     TaskCapability.PROHIBITED_DETECTION,
                     TaskCapability.CONFIDENCE_SCORING
                 ],
-                max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
+                max_concurrent_requests=config.max_workers * 2,
                 preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
-                processing_time_ms_avg=int(os.getenv("ESTIMATED_RESPONSE_TIME_MS", "5000")),
-                cost_per_request_rupees=float(os.getenv("ESTIMATED_COST_PER_REQUEST", "0.50")),
-                confidence_threshold=0.85,
-                supported_document_types=["pdf", "jpg", "png", "jpeg"],
-                supported_languages=["english", "hindi"]
+                processing_time_ms_avg=config.timeout_seconds * 1000,
+                cost_per_request_rupees=0.50, # Placeholder
+                confidence_threshold=config.ocr_confidence_threshold,
+                supported_document_types=config.supported_formats,
+                supported_languages=config.ocr_languages
             )
             
             # Register the agent
@@ -185,6 +185,18 @@ async def start_background_registration_monitor():
             logger.error("Background registration monitor error", error=str(e))
             await asyncio.sleep(60)  # Wait 1 minute before retrying
 
+# Add this coroutine to send heartbeats
+async def send_agent_heartbeat():
+    while not app_state["shutdown_event"].is_set():
+        try:
+            if app_state.get("registry") and app_state.get("medical_agent"):
+                await app_state["registry"]._update_agent_status(
+                    app_state["medical_agent"].agent_id,
+                    AgentStatus.ONLINE
+                )
+        except Exception as e:
+            logger.error("Failed to send agent heartbeat", error=str(e))
+        await asyncio.sleep(120)  # 2 minutes
 
 
 # Global state
@@ -314,10 +326,9 @@ async def lifespan(app: FastAPI):
     app_state["shutdown_event"] = asyncio.Event()
     
     # Initialize Redis Manager with retry logic
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     for attempt in range(3):
         try:
-            app_state["redis_manager"] = RedisStateManager(redis_url)
+            app_state["redis_manager"] = RedisStateManager(config.redis_url)
             await app_state["redis_manager"].connect()
             logger.info("Redis connected successfully", attempt=attempt + 1)
             break
@@ -333,7 +344,7 @@ async def lifespan(app: FastAPI):
     if app_state["redis_manager"]:
         for attempt in range(3):
             try:
-                app_state["registry"] = AgentRegistry(redis_url=redis_url)
+                app_state["registry"] = AgentRegistry(redis_url=config.redis_url)
                 await app_state["registry"].start()
                 logger.info("Agent registry initialized successfully", attempt=attempt + 1)
                 break
@@ -345,21 +356,22 @@ async def lifespan(app: FastAPI):
                     logger.error("All agent registry initialization attempts failed")
                     app_state["registry"] = None
     
-        # Initialize Simple Document Router (Railway-optimized)
+    # Initialize Enhanced Router
     try:
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if openai_api_key:
-            app_state["simple_router"] = SimpleDocumentRouter(
-                redis_url=redis_url,
+            app_state["enhanced_router"] = EnhancedRouterAgent(
+                registry=app_state.get("registry"),
+                redis_url=config.redis_url,
                 openai_api_key=openai_api_key
             )
-            logger.info("Simple document router initialized successfully")
+            logger.info("Enhanced router initialized successfully")
         else:
-            logger.warning("OpenAI API key not found, router not initialized")
-            app_state["simple_router"] = None
+            logger.warning("OpenAI API key not found, enhanced router not initialized")
+            app_state["enhanced_router"] = None
     except Exception as e:
-        logger.error(f"Simple router initialization failed: {e}")
-        app_state["simple_router"] = None
+        logger.error(f"Enhanced router initialization failed: {e}")
+        app_state["enhanced_router"] = None
     
     # Initialize OAuth2 Manager
     try:
@@ -382,9 +394,31 @@ async def lifespan(app: FastAPI):
     # Record startup time
     app_state["startup_time"] = time.time()
     logger.info("Server startup completed successfully")
-    
+
+    # Ensure the medical agent is registered at startup
+    await ensure_agent_registration()
+
+    # Attach the live agent instance to the in-memory registration
+    if app_state.get("registry") and app_state.get("medical_agent"):
+        agent_id = app_state["medical_agent"].agent_id
+        reg = await app_state["registry"].get_agent_status(agent_id)
+        if reg:
+            reg.agent_instance = app_state["medical_agent"]
+            app_state["registry"]._agent_cache[agent_id] = reg
+
+    # Start the heartbeat background task
+    heartbeat_task = asyncio.create_task(send_agent_heartbeat())
+
     yield
     
+    # On shutdown, signal and cancel the heartbeat task
+    app_state["shutdown_event"].set()
+    heartbeat_task.cancel()
+    try:
+        await heartbeat_task
+    except asyncio.CancelledError:
+        pass
+
     # Shutdown
     logger.info("Shutting down MedBillGuard Agent Server")
     
@@ -664,17 +698,12 @@ async def debug_agent_cache():
         # Get cache contents
         cache_data = {}
         for agent_id, registration in registry._agent_cache.items():
-            cache_data[agent_id] = {
-                "agent_id": registration.agent_id,
-                "name": registration.name,
-                "status": registration.status.value,
-                "capabilities": {
-                    "supported_tasks": [task.value for task in registration.capabilities.supported_tasks],
-                    "preferred_model_hints": [hint.value for hint in registration.capabilities.preferred_model_hints]
-                },
-                "last_heartbeat": registration.last_heartbeat.isoformat(),
-                "registration_time": registration.registration_time.isoformat()
-            }
+            agent_dict = asdict(registration)
+            if hasattr(registration, "agent_instance"):
+                agent_dict["agent_instance"] = registration.agent_instance
+            else:
+                agent_dict["agent_instance"] = None
+            cache_data[agent_id] = agent_dict
         
         return {
             "cache_size": len(registry._agent_cache),
@@ -1061,103 +1090,68 @@ Response:"""
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_medical_bill(request: AnalysisRequest, background_tasks: BackgroundTasks):
-    """Analyze a document using the simple document router."""
+    """Analyze a document using the ENHANCED document router."""
     start_time = time.time()
     
     logger.info(
-        "Starting document analysis",
+        "Starting document analysis with enhanced router",
         doc_id=request.doc_id,
         user_id=request.user_id,
         file_format=request.file_format
     )
     
     try:
-        # Check if simple router is available
-        if not app_state.get("simple_router"):
-            raise HTTPException(status_code=503, detail="Document router not available")
+        # Check if enhanced router is available
+        if not app_state.get("enhanced_router"):
+            raise HTTPException(status_code=503, detail="Enhanced document router not available")
         
-        # Decode file content for analysis
+        # Decode file content
         import base64
         file_content_bytes = base64.b64decode(request.file_content)
-        file_content_text = file_content_bytes.decode('utf-8', errors='ignore')
         
-        # Route document to appropriate agent
-        routing_decision = await app_state["simple_router"].route_document(
-            file_content=file_content_text,
+        # Create AgentContext for enhanced router
+        context = AgentContext(
             doc_id=request.doc_id,
             user_id=request.user_id,
-            filename=f"{request.doc_id}.{request.file_format}"
-        )
-        
-        logger.info(
-            "Document routing completed",
-            doc_type=routing_decision.document_type,
-            agent_type=routing_decision.agent_type,
-            confidence=routing_decision.confidence
-        )
-        
-        # Execute analysis using the routed agent
-        try:
-            agent_result = await app_state["simple_router"].execute_analysis(
-                routing_decision=routing_decision,
-                file_content=file_content_bytes,
-                doc_id=request.doc_id,
-                user_id=request.user_id,
-                language=request.language,
-                state_code=request.state_code,
-                insurance_type=request.insurance_type,
-                file_format=request.file_format
-            )
-        except Exception as analysis_error:
-            # If agent analysis fails, try to extract OCR text for debug visibility
-            logger.warning(f"Agent analysis failed, attempting OCR extraction: {analysis_error}")
-            
-            # Try to extract OCR text directly for debug purposes
-            ocr_text = ""
-            processing_stats = {}
-            try:
-                from agents.tools.generic_ocr_tool import GenericOCRTool
-                ocr_tool = GenericOCRTool()
-                ocr_result = await ocr_tool(
-                    file_content=file_content_bytes,
-                    doc_id=request.doc_id,
-                    language=request.language,
-                    file_format=request.file_format
-                )
-                ocr_text = ocr_result.get("raw_text", "")
-                processing_stats = ocr_result.get("processing_stats", {})
-            except Exception as ocr_error:
-                logger.warning(f"OCR extraction also failed: {ocr_error}")
-                ocr_text = f"OCR extraction failed: {str(ocr_error)}"
-            
-            # Return partial result with debug data
-            agent_result = {
-                "success": False,
-                "analysis_complete": False,
-                "verdict": "error",
-                "total_bill_amount": 0.0,
-                "total_overcharge": 0.0,
-                "confidence_score": 0.0,
-                "red_flags": [],
-                "recommendations": [f"Analysis failed: {str(analysis_error)}"],
-                "error": str(analysis_error),
-                "debug_data": {
-                    "ocrText": ocr_text,
-                    "processingStats": processing_stats,
-                    "extractedLineItems": [],
-                    "aiAnalysis": f"Analysis failed: {str(analysis_error)}",
-                    "analysisMethod": "failed",
-                    "documentType": routing_decision.document_type,
-                    "extractionMethod": "ocr_fallback"
-                }
+            correlation_id=f"enhanced_analysis_{request.doc_id}_{int(time.time())}",
+            model_hint=ModelHint.STANDARD,
+            start_time=time.time(),
+            metadata={
+                "file_format": request.file_format,
+                "language": request.language,
+                "task_type": "enhanced_analysis"
             }
+        )
+
+        # Prepare task data for enhanced router
+        task_data = {
+            "file_content": file_content_bytes,
+            "language": request.language,
+            "file_format": request.file_format,
+            "routing_strategy": "capability_based",
+            "priority": "normal",
+            "metadata": {
+                "state_code": request.state_code,
+                "insurance_type": request.insurance_type
+            }
+        }
+
+        # Execute enhanced analysis workflow
+        enhanced_result = await app_state["enhanced_router"].process_task(
+            context=context,
+            task_data=task_data
+        )
+
+        if not enhanced_result.get("success"):
+            raise Exception(enhanced_result.get("error", "Enhanced analysis failed"))
+
+        # Extract final result from the domain agent
+        agent_result = enhanced_result.get("final_result", {}).get("domain_analysis", {})
         
         # Extract OCR text from various sources
-        ocr_text = (agent_result.get("document_processing", {}).get("raw_text", "") or 
-                   agent_result.get("debug_data", {}).get("ocrText", "") or
-                   agent_result.get("raw_text", ""))
+        ocr_text = enhanced_result.get("final_result", {}).get("raw_text", "")
 
-        # Always store document context for chat, even if no query is present
+        # Always store document context for chat
         conversation_id = f"{request.doc_id}_{request.user_id}"
         if conversation_id not in conversations:
             conversations[conversation_id] = {
@@ -1174,11 +1168,8 @@ async def analyze_medical_bill(request: AnalysisRequest, background_tasks: Backg
         query_response = None
         if request.query and ocr_text:
             try:
-                # Get OpenAI client
                 from openai import AsyncOpenAI
                 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                
-                # Generate response to user query
                 query_prompt = f"""You are a medical bill analysis assistant. A user has uploaded a medical bill and asked a question about it.
 
 Document Content:
@@ -1194,21 +1185,18 @@ Please provide a helpful, informative response about their medical bill. Focus o
 - Keeping the response conversational and user-friendly
 
 Response:"""
-                
                 response = await client.chat.completions.create(
                     model="gpt-4",
                     messages=[{"role": "user", "content": query_prompt}],
                     max_tokens=400,
                     temperature=0.7
                 )
-                
                 query_response = response.choices[0].message.content
-                
             except Exception as e:
                 logger.error(f"Query processing error: {e}")
-                query_response = "I'm having trouble processing your question right now. Please try using the chat feature after analysis is complete."
-        
-        # Convert agent result to analysis response
+                query_response = "I'm having trouble processing your question right now."
+
+        # Map enhanced result to AnalysisResponse
         result = AnalysisResponse(
             success=agent_result.get("success", False),
             doc_id=request.doc_id,
@@ -1221,28 +1209,15 @@ Response:"""
             recommendations=agent_result.get("recommendations", []),
             processing_time_seconds=time.time() - start_time,
             
-            # Document analysis metadata
-            document_type=routing_decision.document_type,
-            agent_type=routing_decision.agent_type,
-            routing_confidence=routing_decision.confidence,
+            document_type=enhanced_result.get("document_type"),
+            agent_type=enhanced_result.get("final_result", {}).get("agent_used"),
+            routing_confidence=enhanced_result.get("final_result", {}).get("routing_confidence"),
             
-            # OCR text in multiple formats for frontend compatibility
             ocr_text=ocr_text,
             raw_text=ocr_text,
             rawText=ocr_text,
             
-            # Debug data for frontend
-            debug_data=agent_result.get("debug_data", {
-                "ocrText": ocr_text,
-                "processingStats": agent_result.get("document_processing", {}).get("processing_stats", {}),
-                "extractedLineItems": agent_result.get("document_processing", {}).get("line_items", []),
-                "aiAnalysis": agent_result.get("ai_analysis_notes", ""),
-                "analysisMethod": agent_result.get("analysis_method", "standard"),
-                "documentType": routing_decision.document_type,
-                "extractionMethod": "document_processor"
-            }),
-            
-            # Analysis components
+            debug_data=agent_result.get("debug_data", {}),
             analysis=agent_result.get("confidence_analysis", {}),
             document_processing=agent_result.get("document_processing", {}),
             rate_validation=agent_result.get("rate_validation", {}),
@@ -1257,7 +1232,7 @@ Response:"""
         if analysis_count:
             analysis_count.labels(
                 verdict=result.verdict,
-                agent_id=routing_decision.agent_type
+                agent_id=result.agent_type or "unknown"
             ).inc()
         
         logger.info(
@@ -1265,7 +1240,7 @@ Response:"""
             doc_id=request.doc_id,
             verdict=result.verdict,
             confidence_score=result.confidence_score,
-            document_type=routing_decision.document_type,
+            document_type=result.document_type,
             processing_time_seconds=time.time() - start_time
         )
         
@@ -1626,14 +1601,13 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Get configuration from environment
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8001"))
-    debug = os.getenv("DEBUG", "false").lower() == "true"
-    workers = int(os.getenv("WORKERS", "1"))
+    # Get configuration from config object
+    host = config.host
+    port = config.port
+    debug = config.app.debug
+    workers = config.max_workers
+    log_level = config.log_level
     
-    # Configure logging level
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=getattr(logging, log_level))
     
     logger.info(
@@ -1652,6 +1626,6 @@ if __name__ == "__main__":
         port=port,
         log_level=log_level.lower(),
         reload=debug,
-        workers=1 if debug else workers,  # Single worker in debug mode
+        workers=1 if debug else workers,
         access_log=True
-    ) 
+    )
