@@ -147,33 +147,47 @@ async def get_user_bills(session: AsyncSession, user_id: str, limit: int = 50) -
     # Handle non-UUID format strings by generating a UUID if needed
     try:
         user_uuid = uuid.UUID(user_id)
+        logger.info(f"get_user_bills: user_id is valid UUID: {user_id}")
     except ValueError:
         # If user_id is not a valid UUID format, generate a new one based on the string
         user_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
+        logger.info(f"get_user_bills: Generated UUID {user_uuid} from non-UUID user_id: {user_id}")
     
     user_id_str = str(user_uuid)
+    logger.info(f"get_user_bills: Using user_id_str: {user_id_str} for lookup")
     
     try:
         # Try to use the database first with robust session management
         try:
             repo = BillAnalysisRepository(session)
+            logger.info(f"get_user_bills: Querying database for bills with user_id: {user_uuid}")
             result = await repo.get_user_analyses(user_uuid, limit=limit)
             await session.commit()
+            logger.info(f"get_user_bills: Found {len(result)} bills in database for user_id: {user_uuid}")
             return result
         except Exception as db_error:
             # Rollback on any database error
             await session.rollback()
+            logger.error(f"get_user_bills: Database error: {db_error}")
             raise db_error
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
         
+        # Log in-memory bills state
+        logger.info(f"get_user_bills: In-memory bills users: {list(_in_memory_bills.keys())}")
+        
         # Return empty list if user has no bills
         if user_id_str not in _in_memory_bills:
+            logger.warning(f"get_user_bills: No bills found in in-memory storage for user_id: {user_id_str}")
             return []
         
         # Convert in-memory bills to BillAnalysis objects
         bills = []
+        user_bills = _in_memory_bills[user_id_str]
+        logger.info(f"get_user_bills: Found {len(user_bills)} bills in in-memory storage for user_id: {user_id_str}")
+        logger.info(f"get_user_bills: Bill IDs: {list(user_bills.keys())}")
+        
         for bill_id, bill_data in list(_in_memory_bills[user_id_str].items())[:limit]:
             # Ensure all required attributes exist
             required_attrs = {
@@ -197,34 +211,48 @@ async def get_bill_by_id(session: AsyncSession, doc_id: str) -> Optional[BillAna
     # Handle non-UUID format strings by generating a UUID if needed
     try:
         id_uuid = uuid.UUID(doc_id)
+        logger.info(f"get_bill_by_id: doc_id is valid UUID: {doc_id}")
     except ValueError:
         # If doc_id is not a valid UUID format, generate a new one based on the string
         id_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, doc_id)
+        logger.info(f"get_bill_by_id: Generated UUID {id_uuid} from non-UUID doc_id: {doc_id}")
     
     id_str = str(id_uuid)
+    logger.info(f"get_bill_by_id: Using id_str: {id_str} for lookup")
     
     try:
         # Try to use the database first with robust session management
         try:
             repo = BillAnalysisRepository(session)
+            logger.info(f"get_bill_by_id: Querying database for bill with id: {id_uuid}")
             result = await repo.get_analysis_by_id(id_uuid)
             await session.commit()
+            if result:
+                logger.info(f"get_bill_by_id: Found bill in database with id: {id_uuid}")
+            else:
+                logger.warning(f"get_bill_by_id: No bill found in database with id: {id_uuid}")
             return result
         except Exception as db_error:
             # Rollback on any database error
             await session.rollback()
+            logger.error(f"get_bill_by_id: Database error: {db_error}")
             raise db_error
     except Exception as e:
         # Fallback to in-memory storage if database fails
         logger.warning(f"Database operation failed, using in-memory fallback: {e}")
+        
+        # Log in-memory bills state
+        logger.info(f"get_bill_by_id: In-memory bills users: {list(_in_memory_bills.keys())}")
+        for user_id, bills in _in_memory_bills.items():
+            logger.info(f"get_bill_by_id: User {user_id} has {len(bills)} bills with IDs: {list(bills.keys())}")
         
         # Search for the bill in all users' bills
         for user_id, user_bills in _in_memory_bills.items():
             if id_str in user_bills:
                 bill_data = user_bills[id_str]
                 # Debug log the retrieved bill data
-                logger.debug(f"Retrieved bill data for doc_id={id_str}")
-                logger.debug(f"bill_data keys: {list(bill_data.keys())}")
+                logger.info(f"get_bill_by_id: Found bill in in-memory storage for doc_id={id_str} under user_id={user_id}")
+                logger.info(f"get_bill_by_id: bill_data keys: {list(bill_data.keys())}")
                 
                 if 'raw_analysis' in bill_data:
                     raw_analysis = bill_data['raw_analysis']
