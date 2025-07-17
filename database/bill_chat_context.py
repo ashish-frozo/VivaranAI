@@ -7,8 +7,7 @@ import logging
 import sqlalchemy as sa
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.repositories import BillAnalysisRepository
-from database.models import BillAnalysis
+from database.models import BillAnalysis, BillAnalysisRepository
 
 # In-memory fallback storage for bill analyses
 _in_memory_bills = {}
