@@ -1368,12 +1368,30 @@ async def chat_with_agent(request: ChatRequest):
         # Get document context from database
         document_context = ""
         try:
-            from database.bill_chat_context import get_bill_by_id
+            from database.bill_chat_context import get_bill_by_id, get_user_bills
             from database.models import db_manager
             
+            # Try to get the specific bill by doc_id
             async with db_manager.get_async_session() as session:
                 bill = await get_bill_by_id(session, request.doc_id)
-                
+            
+            # If specific bill not found, try to get the most recent bill for this user
+            if not bill and request.user_id:
+                logger.info(
+                    "Specific bill not found, trying to get most recent bill",
+                    doc_id=request.doc_id,
+                    user_id=request.user_id
+                )
+                async with db_manager.get_async_session() as session:
+                    user_bills = await get_user_bills(session, request.user_id, limit=1)
+                    if user_bills and len(user_bills) > 0:
+                        bill = user_bills[0]
+                        logger.info(
+                            "Using most recent bill for chat context",
+                            doc_id=getattr(bill, 'id', 'unknown'),
+                            user_id=request.user_id
+                        )
+            
             if bill:
                 # Extract relevant information from the bill analysis
                 context_parts = []
