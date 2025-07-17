@@ -1939,7 +1939,7 @@ if __name__ == "__main__":
     # Get configuration from config object
     host = config.host
     port = config.port
-    debug = config.app.debug
+    debug = config.debug if hasattr(config, 'debug') else False
     workers = config.max_workers
     log_level = config.log_level
     

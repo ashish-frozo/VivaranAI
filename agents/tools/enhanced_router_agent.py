@@ -551,8 +551,34 @@ class EnhancedRouterAgent(BaseAgent):
         ocr_stats = ocr_result.get("processing_stats", {})
         domain_analysis = domain_result.get("domain_result", {})
         
+        # Extract line items from domain_analysis for direct access in final result
+        line_items = []
+        
+        # Check multiple possible locations for line items
+        if isinstance(domain_analysis, dict):
+            # Direct line_items in domain_analysis
+            if "line_items" in domain_analysis and domain_analysis["line_items"]:
+                line_items = domain_analysis["line_items"]
+                logger.info("Found line_items directly in domain_analysis", count=len(line_items))
+            # line_items_ai in domain_analysis
+            elif "line_items_ai" in domain_analysis and domain_analysis["line_items_ai"]:
+                line_items = domain_analysis["line_items_ai"]
+                logger.info("Found line_items_ai in domain_analysis", count=len(line_items))
+            # Check in results sub-object
+            elif "results" in domain_analysis and isinstance(domain_analysis["results"], dict):
+                results = domain_analysis["results"]
+                if "line_items" in results and results["line_items"]:
+                    line_items = results["line_items"]
+                    logger.info("Found line_items in domain_analysis.results", count=len(line_items))
+                elif "line_items_ai" in results and results["line_items_ai"]:
+                    line_items = results["line_items_ai"]
+                    logger.info("Found line_items_ai in domain_analysis.results", count=len(line_items))
+                elif "debug_line_items" in results and results["debug_line_items"]:
+                    line_items = results["debug_line_items"]
+                    logger.info("Found debug_line_items in domain_analysis.results", count=len(line_items))
+        
         # Compile comprehensive result
-        return {
+        result = {
             "analysis_complete": True,
             "document_type": classification_result.get("document_type", "unknown"),
             "classification_confidence": classification_result.get("confidence", 0.0),
@@ -597,6 +623,13 @@ class EnhancedRouterAgent(BaseAgent):
                 "domain_analysis_successful": domain_result.get("success", False)
             }
         }
+        
+        # Add line items to top level of final result for easier access by chat endpoint
+        if line_items:
+            result["line_items"] = line_items
+            logger.info("Added line_items to final_result", count=len(line_items))
+        
+        return result
     
     def _generate_recommendations(
         self,
