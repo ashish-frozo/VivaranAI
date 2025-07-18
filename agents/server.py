@@ -1423,9 +1423,29 @@ async def chat_with_agent(request: ChatRequest):
                         if 'confidence' in final_result:
                             context_parts.append(f"Confidence level: {final_result['confidence']}%")
                         
-                        # Add total amount if available
+                        # Add total amount if available, else compute from line items
+                        total_amount = None
                         if 'total_amount' in final_result:
-                            context_parts.append(f"Total bill amount: ₹{final_result['total_amount']}")
+                            total_amount = final_result['total_amount']
+                        elif 'total_bill_amount' in final_result:
+                            total_amount = final_result['total_bill_amount']
+                        
+                        # If still missing, compute from line items if available
+                        if total_amount is None:
+                            # Try to find line_items (already extracted below, but repeat for clarity)
+                            possible_line_items = None
+                            if 'line_items' in final_result and final_result['line_items']:
+                                possible_line_items = final_result['line_items']
+                            elif 'results' in final_result and isinstance(final_result['results'], dict) and 'line_items' in final_result['results']:
+                                possible_line_items = final_result['results']['line_items']
+                            # Compute sum if possible
+                            if possible_line_items and isinstance(possible_line_items, list):
+                                try:
+                                    total_amount = sum(float(item.get('amount', item.get('cost', 0)) or 0) for item in possible_line_items)
+                                except Exception as e:
+                                    logger.warning(f"Failed to compute total_amount from line_items: {e}")
+                        if total_amount is not None:
+                            context_parts.append(f"Total bill amount: ₹{total_amount}")
                         
                         # Add overcharge information
                         if 'overcharge_amount' in final_result:
