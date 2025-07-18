@@ -47,7 +47,7 @@ class ToolRegistration:
     registration_time: float = 0.0
     initialization_time: Optional[float] = None
     last_health_check: Optional[float] = None
-    health_status: Dict[str, Any] = {}
+    health_status: Dict[str, Any] = field(default_factory=dict)
     error_count: int = 0
     last_error: Optional[str] = None
     scaling_enabled: bool = False
