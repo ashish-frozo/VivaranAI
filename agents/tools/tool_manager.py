@@ -13,7 +13,7 @@ import asyncio
 import structlog
 import time
 from typing import Dict, List, Optional, Any, Type, Set, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from agents.interfaces import ITool, ToolState, ToolCapabilityDeclaration, AgentContext
