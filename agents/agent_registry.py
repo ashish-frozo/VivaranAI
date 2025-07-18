@@ -74,6 +74,10 @@ class TaskCapability(str, Enum):
     COMPLIANCE_CHECK = "compliance_check"
     DOCUMENT_VERIFICATION = "document_verification"
     DATA_EXTRACTION = "data_extraction"
+    # Loan-specific capabilities for pack-driven architecture
+    LOAN_ANALYSIS = "loan_analysis"
+    LOAN_RISK_ASSESSMENT = "loan_risk_assessment"
+    LOAN_COMPLIANCE_CHECK = "loan_compliance_check"
 
 
 @dataclass

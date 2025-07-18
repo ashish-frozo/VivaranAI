@@ -1,0 +1,38 @@
+input,mapped
+consultation,consultation
+consultation fee,consultation
+doctor consultation,consultation
+physician consultation,consultation
+specialist consultation,consultation
+room charge,room_charge
+bed charge,room_charge
+room rent,room_charge
+bed rent,room_charge
+diagnostic,diagnostic_test
+lab test,diagnostic_test
+pathology,diagnostic_test
+blood test,diagnostic_test
+urine test,diagnostic_test
+x-ray,diagnostic_test
+mri,diagnostic_test
+ct scan,diagnostic_test
+ultrasound,diagnostic_test
+ecg,diagnostic_test
+echo,diagnostic_test
+medicine,medication
+drug,medication
+tablet,medication
+injection,medication
+iv fluid,medication
+surgery,surgical_procedure
+operation,surgical_procedure
+procedure,surgical_procedure
+emergency,emergency_charge
+casualty,emergency_charge
+icu,icu_charge
+intensive care,icu_charge
+nursing,nursing_charge
+physiotherapy,physiotherapy
+physio,physiotherapy
+dressing,dressing_charge
+bandage,dressing_charge

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from .tool_manager import tool_manager
 from .scaling import ScalingConfig, LoadBalancingStrategy
 from .load_balancer import LoadBalancerConfig
-from .rate_validator_tool import RateValidatorTool
+from agents.verticals.medical.tools.medical_rate_validator_tool import MedicalRateValidatorTool
 from .generic_ocr_tool import GenericOCRTool
 from agents.interfaces import AgentContext
 
@@ -65,10 +65,10 @@ class ProductionIntegration:
                 session_timeout=3600
             )
             
-            # Register RateValidatorTool with scaling
+            # Register MedicalRateValidatorTool with scaling
             success = await tool_manager.register_tool(
                 tool_name="rate_validator",
-                tool_class=RateValidatorTool,
+                tool_class=MedicalRateValidatorTool,
                 auto_initialize=False,
                 enable_scaling=self.config.enable_scaling,
                 scaling_config=rate_validator_scaling,

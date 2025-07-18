@@ -1,0 +1,33 @@
+id: loan
+name: "Loan Risk Assessment Pack"
+version: "1.0.0"
+description: "Rule pack for loan document analysis and risk assessment"
+
+rate_sources: []  # No external rate files for loan pack
+
+regex_rules:
+  - match: "(interest rate|interest|rate of interest)"
+    cap: 27.0
+    type: "overcharge"
+    severity: "high"
+    description: "Interest rate cap validation (27% per annum maximum)"
+  
+  - match: "(processing fee|processing charge)"
+    cap: 1000
+    type: "overcharge"
+    severity: "medium"
+    description: "Processing fee cap validation (₹1000 maximum)"
+
+validation_settings:
+  duplicate_threshold: 0.9
+  overcharge_threshold_percentage: 15
+  confidence_threshold: 0.8
+  
+prohibited_items:
+  - "hidden charges"
+  - "undisclosed fee"
+  - "penalty without notice"
+  
+entity_mappings:
+  enabled: true
+  case_sensitive: false

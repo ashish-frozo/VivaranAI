@@ -174,6 +174,13 @@ class RouterAgent(BaseAgent):
         self.MAX_ROUTING_ATTEMPTS = 3
         self.FALLBACK_THRESHOLD = 0.7  # Use fallback if confidence < 70%
         
+        # Cold-poke configuration for production health
+        self.HEALTH_CHECK_TTL = 300  # 5 minutes TTL for health checks
+        self.AGENT_REFRESH_TTL = 600  # 10 minutes TTL for agent registry refresh
+        self.last_health_check = 0
+        self.last_agent_refresh = 0
+        self.health_status = {"healthy": True, "last_check": 0, "issues": []}
+        
         # Workflow execution tracking
         self._active_workflows: Dict[str, WorkflowDefinition] = {}
         
@@ -187,15 +194,128 @@ class RouterAgent(BaseAgent):
         
         logger.info("Router agent started successfully")
     
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the router agent."""
-        # Cancel any active workflows
-        for workflow_id in list(self._active_workflows.keys()):
-            logger.info("Cancelling active workflow", workflow_id=workflow_id)
-            del self._active_workflows[workflow_id]
+        logger.info("Stopping RouterAgent")
         
+        # Cancel any active workflows
+        self._active_workflows.clear()
+        
+        # Stop base agent
         await super().stop()
-        logger.info("Router agent stopped")
+        
+        logger.info("RouterAgent stopped")
+    
+    async def healthz(self) -> Dict[str, Any]:
+        """Health check endpoint for RouterAgent cold-poke functionality."""
+        current_time = time.time()
+        
+        # Check if we need to refresh health status
+        if current_time - self.last_health_check > self.HEALTH_CHECK_TTL:
+            await self._perform_health_check()
+            self.last_health_check = current_time
+        
+        return {
+            "status": "healthy" if self.health_status["healthy"] else "unhealthy",
+            "timestamp": current_time,
+            "last_check": self.health_status["last_check"],
+            "ttl_seconds": self.HEALTH_CHECK_TTL,
+            "issues": self.health_status["issues"],
+            "agent_registry_status": await self._check_agent_registry_health(),
+            "active_workflows": len(self._active_workflows),
+            "uptime_seconds": current_time - self.last_health_check if self.last_health_check > 0 else 0
+        }
+    
+    async def _perform_health_check(self) -> None:
+        """Perform comprehensive health check of RouterAgent."""
+        issues = []
+        current_time = time.time()
+        
+        try:
+            # Check agent registry connectivity
+            registry_status = await self._check_agent_registry_health()
+            if not registry_status.get("healthy", False):
+                issues.append("Agent registry is unhealthy")
+            
+            # Check Redis state manager connectivity
+            if self.state_manager:
+                try:
+                    await self.state_manager.get_state("health_check_test")
+                except Exception as e:
+                    issues.append(f"Redis state manager error: {str(e)}")
+            
+            # Check for stale workflows
+            stale_workflows = [
+                wf_id for wf_id, wf in self._active_workflows.items()
+                if current_time - wf.metadata.get("start_time", current_time) > wf.total_timeout_seconds
+            ]
+            if stale_workflows:
+                issues.append(f"Found {len(stale_workflows)} stale workflows")
+                # Clean up stale workflows
+                for wf_id in stale_workflows:
+                    del self._active_workflows[wf_id]
+            
+            self.health_status = {
+                "healthy": len(issues) == 0,
+                "last_check": current_time,
+                "issues": issues
+            }
+            
+            logger.info(
+                "Health check completed",
+                healthy=self.health_status["healthy"],
+                issues_count=len(issues),
+                issues=issues
+            )
+            
+        except Exception as e:
+            self.health_status = {
+                "healthy": False,
+                "last_check": current_time,
+                "issues": [f"Health check failed: {str(e)}"]
+            }
+            logger.error("Health check failed", error=str(e), exc_info=True)
+    
+    async def _check_agent_registry_health(self) -> Dict[str, Any]:
+        """Check health of agent registry."""
+        try:
+            # Get registry status
+            agents = await self.registry.get_all_agents()
+            healthy_agents = [a for a in agents if a.status.value == "healthy"]
+            
+            return {
+                "healthy": len(healthy_agents) > 0,
+                "total_agents": len(agents),
+                "healthy_agents": len(healthy_agents),
+                "unhealthy_agents": len(agents) - len(healthy_agents)
+            }
+        except Exception as e:
+            return {
+                "healthy": False,
+                "error": str(e)
+            }
+    
+    async def _refresh_agent_registry(self) -> None:
+        """Refresh agent registry cache for cold-poke functionality."""
+        current_time = time.time()
+        
+        if current_time - self.last_agent_refresh > self.AGENT_REFRESH_TTL:
+            try:
+                # Force refresh of agent registry
+                await self.registry.refresh_agent_cache()
+                self.last_agent_refresh = current_time
+                
+                logger.info(
+                    "Agent registry refreshed",
+                    ttl_seconds=self.AGENT_REFRESH_TTL,
+                    next_refresh=current_time + self.AGENT_REFRESH_TTL
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to refresh agent registry",
+                    error=str(e),
+                    exc_info=True
+                )
     
     async def process_task(self, context: AgentContext, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -235,6 +355,9 @@ class RouterAgent(BaseAgent):
             routing_start = time.time()
             
             try:
+                # Cold-poke: Refresh agent registry on every request for production health
+                await self._refresh_agent_registry()
+                
                 # Discover candidate agents
                 candidates = await self.registry.discover_agents(
                     required_capabilities=routing_request.required_capabilities,

@@ -115,7 +115,11 @@ class EnhancedRouterAgent(BaseAgent):
             RequiredCapability.DUPLICATE_DETECTION: TaskCapability.DUPLICATE_DETECTION,
             RequiredCapability.COMPLIANCE_CHECK: TaskCapability.COMPLIANCE_CHECK,
             RequiredCapability.DATA_EXTRACTION: TaskCapability.DATA_EXTRACTION,
-            RequiredCapability.DOCUMENT_VERIFICATION: TaskCapability.DOCUMENT_VERIFICATION
+            RequiredCapability.DOCUMENT_VERIFICATION: TaskCapability.DOCUMENT_VERIFICATION,
+            # Loan-specific capabilities for pack-driven architecture
+            RequiredCapability.LOAN_ANALYSIS: TaskCapability.LOAN_ANALYSIS,
+            RequiredCapability.LOAN_RISK_ASSESSMENT: TaskCapability.LOAN_RISK_ASSESSMENT,
+            RequiredCapability.LOAN_COMPLIANCE_CHECK: TaskCapability.LOAN_COMPLIANCE_CHECK
         }
         
         logger.info("Initialized EnhancedRouterAgent with OCR and classification capabilities")

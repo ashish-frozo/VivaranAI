@@ -587,15 +587,23 @@ async def health_check():
         components["redis"] = "unhealthy"
     
     try:
-        # Simple router health
-        if app_state["simple_router"]:
-            router_health = await app_state["simple_router"].health_check()
-            components["simple_router"] = router_health.get("status", "unknown")
+        # RouterAgent health check for cold-poke functionality
+        from agents.router_agent import router_agent
+        if router_agent:
+            router_health = await router_agent.healthz()
+            components["router_agent"] = router_health.get("status", "unknown")
+            # Add detailed router health info
+            components["router_agent_details"] = {
+                "ttl_seconds": router_health.get("ttl_seconds", 0),
+                "active_workflows": router_health.get("active_workflows", 0),
+                "agent_registry_healthy": router_health.get("agent_registry_status", {}).get("healthy", False),
+                "issues_count": len(router_health.get("issues", []))
+            }
         else:
-            components["simple_router"] = "unhealthy"
+            components["router_agent"] = "unhealthy"
     except Exception as e:
-        logger.error("Simple router health check failed", error=str(e))
-        components["simple_router"] = "unhealthy"
+        logger.error("RouterAgent health check failed", error=str(e))
+        components["router_agent"] = "unhealthy"
     
     # Determine overall status
     status = "healthy" if all(c == "healthy" for c in components.values()) else "unhealthy"
@@ -833,40 +841,58 @@ async def test_simple():
 
 @app.get("/debug/test-router-availability")
 async def test_router_availability():
-    """Test endpoint to verify simple document router is working."""
+    """Test endpoint to verify RouterAgent is working with cold-poke functionality."""
     try:
-        if not app_state.get("simple_router"):
+        from agents.router_agent import router_agent
+        if not router_agent:
             return {
                 "status": "error",
-                "message": "Simple router not available"
+                "message": "RouterAgent not available"
             }
         
-        # Test router health
-        health_result = await app_state["simple_router"].health_check()
+        # Test router health with cold-poke functionality
+        health_result = await router_agent.healthz()
         
-        # Test document type detection
-        test_content = "This is a medical bill from Apollo Hospital for patient treatment and medicines."
-        routing_decision = await app_state["simple_router"].route_document(
-            file_content=test_content,
+        # Test routing decision capability
+        from agents.router_agent import RoutingRequest, RoutingStrategy
+        from agents.interfaces import TaskCapability, ModelHint
+        
+        test_routing_request = RoutingRequest(
             doc_id="test-123",
             user_id="test-user",
-            filename="test_bill.pdf"
+            task_type="medical_bill_analysis",
+            required_capabilities=[TaskCapability.MEDICAL_ANALYSIS, TaskCapability.RATE_VALIDATION],
+            model_hint=ModelHint.COST_OPTIMIZED,
+            routing_strategy=RoutingStrategy.CAPABILITY_BASED,
+            max_agents=1,
+            timeout_seconds=30,
+            priority=5,
+            metadata={"test": True}
         )
+        
+        routing_decision = await router_agent.route_request(test_routing_request)
         
         return {
             "status": "success",
-            "message": "Simple router is working",
+            "message": "RouterAgent is working with cold-poke functionality",
             "router_health": health_result,
             "test_routing": {
-                "document_type": routing_decision.document_type,
-                "agent_type": routing_decision.agent_type,
-                "confidence": routing_decision.confidence
+                "selected_agents": [agent.agent_id for agent in routing_decision.selected_agents],
+                "routing_strategy": routing_decision.routing_strategy.value,
+                "confidence": routing_decision.confidence,
+                "estimated_cost": routing_decision.estimated_cost_rupees,
+                "estimated_time_ms": routing_decision.estimated_time_ms
+            },
+            "cold_poke_status": {
+                "health_ttl_seconds": health_result.get("ttl_seconds", 0),
+                "active_workflows": health_result.get("active_workflows", 0),
+                "agent_registry_healthy": health_result.get("agent_registry_status", {}).get("healthy", False)
             }
         }
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Router test failed: {str(e)}"
+            "message": f"RouterAgent test failed: {str(e)}"
         }
 
 

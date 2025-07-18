@@ -32,6 +32,10 @@ class DocumentType(str, Enum):
     BUSINESS_INVOICE = "business_invoice"
     GOVERNMENT_FORM = "government_form"
     ACADEMIC_TRANSCRIPT = "academic_transcript"
+    # Loan document types for pack-driven architecture
+    LOAN_APPLICATION = "loan_application"
+    LOAN_AGREEMENT = "loan_agreement"
+    LOAN_STATEMENT = "loan_statement"
     UNKNOWN = "unknown"
 
 
@@ -45,6 +49,10 @@ class RequiredCapability(str, Enum):
     COMPLIANCE_CHECK = "compliance_check"
     DATA_EXTRACTION = "data_extraction"
     DOCUMENT_VERIFICATION = "document_verification"
+    # Loan-specific capabilities for pack-driven architecture
+    LOAN_ANALYSIS = "loan_analysis"
+    LOAN_RISK_ASSESSMENT = "loan_risk_assessment"
+    LOAN_COMPLIANCE_CHECK = "loan_compliance_check"
 
 
 class ClassificationResult(BaseModel):
@@ -115,6 +123,22 @@ class DocumentTypeClassifier:
             DocumentType.BUSINESS_INVOICE: [
                 RequiredCapability.FINANCIAL_ANALYSIS,
                 RequiredCapability.RATE_VALIDATION
+            ],
+            # Loan document types for pack-driven architecture
+            DocumentType.LOAN_APPLICATION: [
+                RequiredCapability.LOAN_ANALYSIS,
+                RequiredCapability.LOAN_RISK_ASSESSMENT,
+                RequiredCapability.DUPLICATE_DETECTION
+            ],
+            DocumentType.LOAN_AGREEMENT: [
+                RequiredCapability.LOAN_ANALYSIS,
+                RequiredCapability.LOAN_COMPLIANCE_CHECK,
+                RequiredCapability.LEGAL_ANALYSIS
+            ],
+            DocumentType.LOAN_STATEMENT: [
+                RequiredCapability.LOAN_ANALYSIS,
+                RequiredCapability.FINANCIAL_ANALYSIS,
+                RequiredCapability.DATA_EXTRACTION
             ]
         }
         
@@ -129,6 +153,10 @@ class DocumentTypeClassifier:
             DocumentType.BUSINESS_INVOICE: "business_invoice_agent",
             DocumentType.GOVERNMENT_FORM: "government_form_agent",
             DocumentType.ACADEMIC_TRANSCRIPT: "academic_document_agent",
+            # Loan document types for pack-driven architecture
+            DocumentType.LOAN_APPLICATION: "loan_risk_agent",
+            DocumentType.LOAN_AGREEMENT: "loan_risk_agent",
+            DocumentType.LOAN_STATEMENT: "loan_risk_agent",
             DocumentType.UNKNOWN: "generic_document_agent"
         }
         

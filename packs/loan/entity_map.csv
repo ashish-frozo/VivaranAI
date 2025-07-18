@@ -1,0 +1,29 @@
+input,mapped
+interest rate,interest_rate
+rate of interest,interest_rate
+interest,interest_rate
+processing fee,processing_fee
+processing charge,processing_fee
+processing cost,processing_fee
+loan amount,loan_amount
+principal,loan_amount
+principal amount,loan_amount
+tenure,loan_tenure
+term,loan_tenure
+loan term,loan_tenure
+repayment period,loan_tenure
+emi,emi
+monthly installment,emi
+equated monthly installment,emi
+late fee,late_fee
+penalty,penalty_charge
+penal charge,penalty_charge
+bounce charge,bounce_charge
+cheque bounce,bounce_charge
+foreclosure,foreclosure_charge
+prepayment,prepayment_charge
+part payment,part_payment_charge
+documentation,documentation_charge
+legal fee,legal_fee
+stamp duty,stamp_duty
+registration,registration_charge

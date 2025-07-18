@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 [![Railway](https://img.shields.io/badge/Railway-Live-blue.svg)](https://endearing-prosperity-production.up.railway.app)
+[![Architecture](https://img.shields.io/badge/Architecture-Multi--Vertical-purple.svg)](docs/architecture_diagram.md)
 
 > **AI-Powered Medical Bill Analysis with Intelligent Government Data Scraping**
 
@@ -57,6 +58,20 @@ VivaranAI MedBillGuardAgent is a revolutionary AI-powered system that automatica
 - **🐳 Docker & Kubernetes**: Full containerization and orchestration support
 - **🔧 CI/CD Pipeline**: Automated testing, linting, and deployment
 - **📊 Monitoring & Metrics**: Prometheus integration for production monitoring
+
+## 🏗️ Architecture
+
+VivaranAI implements a sophisticated multi-vertical, pack-driven architecture that enables seamless analysis across different document domains. The system uses a central RouterAgent to classify documents and route them to specialized domain agents (Medical, Loan, Insurance).
+
+**[View detailed architecture diagram](docs/architecture_diagram.md)**
+
+### Key Components
+
+- **RouterAgent**: Central intelligence for document classification and routing
+- **Domain Agents**: Specialized agents for different document types
+- **Rule Packs**: Domain-specific validation rules in YAML format
+- **Shared Infrastructure**: ToolManager, horizontal scaling, load balancing
+- **Testing Framework**: Golden fixtures, parametrized tests, CI recall checks
 
 ## 📁 Project Structure
 
@@ -735,7 +750,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] **Railway Deployment**: ✅ Live production system
 - [x] **Production Frontend**: ✅ Comprehensive testing dashboard
 - [x] **API Documentation**: ✅ Complete interactive docs
-- [x] **Multi-Agent System**: ✅ Fully operational
+- [x] **Multi-Vertical Architecture**: ✅ Medical, loan, and insurance domains
+- [x] **Pack-Driven Design**: ✅ Domain-specific rule packs
+- [x] **Router Health Checks**: ✅ Cold-poke health monitoring
+- [x] **Regression Testing**: ✅ Golden fixtures and CI recall checks
 - [x] **Error Handling**: ✅ Comprehensive error resolution
 - [x] **Performance Optimization**: ✅ Sub-30s response times
 

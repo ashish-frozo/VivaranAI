@@ -1,0 +1,48 @@
+id: medical
+name: "Medical Bill Validation Pack"
+version: "1.0.0"
+description: "Rule pack for medical bill analysis and overcharge detection"
+
+rate_sources:
+  - cghs_rates_2023.json
+  - esi_rates.json
+  - nppa_rates.json
+
+regex_rules:
+  - match: "(consultation( fee)?)"
+    cap: 500
+    type: "overcharge"
+    severity: "medium"
+    description: "Consultation fee cap validation"
+  
+  - match: "(room( charge)?|bed( charge)?)"
+    cap: 2000
+    type: "overcharge" 
+    severity: "medium"
+    description: "Room/bed charge cap validation"
+  
+  - match: "(emergency|casualty)"
+    cap: 1000
+    type: "overcharge"
+    severity: "high"
+    description: "Emergency charge cap validation"
+  
+  - match: "(diagnostic|lab|pathology)"
+    cap: 1500
+    type: "overcharge"
+    severity: "medium"
+    description: "Diagnostic test cap validation"
+
+validation_settings:
+  duplicate_threshold: 0.9
+  overcharge_threshold_percentage: 20
+  confidence_threshold: 0.7
+  
+prohibited_items:
+  - "registration fee"
+  - "admission fee"
+  - "documentation charges"
+  
+entity_mappings:
+  enabled: true
+  case_sensitive: false

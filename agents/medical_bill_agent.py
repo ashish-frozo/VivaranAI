@@ -17,7 +17,7 @@ from opentelemetry import trace
 from agents.base_agent import BaseAgent
 from agents.interfaces import AgentContext, AgentResult, ModelHint
 from agents.interfaces import AgentCapabilityDeclaration, ITool
-from agents.tools.rate_validator_tool import RateValidatorTool
+from agents.verticals.medical.tools.medical_rate_validator_tool import MedicalRateValidatorTool
 from agents.tools.generic_ocr_tool import GenericOCRTool
 from agents.tools import (
     DuplicateDetectorTool,
@@ -56,7 +56,7 @@ class MedicalBillAgent(BaseAgent):
         self.openai_api_key = openai_api_key
         
         # Tools will be managed by production integration
-        self.rate_validator_tool = RateValidatorTool()
+        self.rate_validator_tool = MedicalRateValidatorTool()
         self.ocr_tool = None
         self.duplicate_detector_tool = DuplicateDetectorTool()
         self.prohibited_detector_tool = ProhibitedDetectorTool()
