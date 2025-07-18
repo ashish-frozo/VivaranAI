@@ -56,7 +56,7 @@ class MedicalBillAgent(BaseAgent):
         self.openai_api_key = openai_api_key
         
         # Tools will be managed by production integration
-        self.rate_validator = None
+        self.rate_validator_tool = RateValidatorTool()
         self.ocr_tool = None
         self.duplicate_detector_tool = DuplicateDetectorTool()
         self.prohibited_detector_tool = ProhibitedDetectorTool()
