@@ -325,6 +325,22 @@ result = await router.process_document(
 )
 ```
 
+## 🧠 Database Upsert Logic
+
+### Graceful Handling of Duplicate Bill Analyses
+
+VivaranAI now supports **upsert** (update-or-insert) for bill analysis persistence:
+- When saving a bill analysis, if a record with the same `doc_id` (UUID) already exists, the system will **update** the existing record instead of failing with a database error.
+- This ensures that repeated uploads or re-analyses of the same document do not cause errors and always persist the latest results.
+- Implementation is in `database/bill_chat_context.py` using the `BillAnalysisRepository.update_analysis` method as an upsert fallback when a duplicate key violation is detected.
+
+**Benefit:**
+- Prevents IntegrityError and duplicate key exceptions in production.
+- Guarantees idempotent saves for bill analyses.
+- Enables robust end-to-end workflows for document reprocessing and chat context retrieval.
+
+---
+
 ## 🧠 AI Web Scraping Architecture
 
 ### Revolutionary Approach
