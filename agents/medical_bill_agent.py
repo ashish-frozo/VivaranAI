@@ -14,7 +14,8 @@ import time
 from typing import Dict, Any, List, Optional
 from opentelemetry import trace
 
-from agents.base_agent import BaseAgent, AgentContext, AgentResult, ModelHint
+from agents.base_agent import BaseAgent
+from agents.interfaces import AgentContext, AgentResult, ModelHint
 from agents.interfaces import AgentCapabilityDeclaration, ITool
 from agents.tools.rate_validator_tool import RateValidatorTool
 from agents.tools.generic_ocr_tool import GenericOCRTool

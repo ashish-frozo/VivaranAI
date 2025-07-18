@@ -12,7 +12,41 @@ from typing import Dict, Any, List, Optional, Protocol, runtime_checkable
 from dataclasses import dataclass
 from enum import Enum
 
-from .base_agent import AgentContext, AgentResult, ModelHint
+# Moved from base_agent.py to resolve circular import
+from enum import Enum
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
+
+class ModelHint(str, Enum):
+    """Model complexity hints from RouterAgent."""
+    CHEAP = "cheap"        # GPT-3.5 or local Mistral
+    STANDARD = "standard"  # GPT-4o for complex analysis
+    PREMIUM = "premium"    # GPT-4 for highest accuracy
+
+@dataclass
+class AgentResult:
+    """Standardized result format for agent responses."""
+    success: bool
+    data: Dict[str, Any]
+    agent_id: str
+    task_type: str
+    execution_time_ms: int
+    model_used: str
+    cost_rupees: float
+    confidence: float = 1.0
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+@dataclass
+class AgentContext:
+    """Context shared across agent execution."""
+    doc_id: str
+    user_id: str
+    correlation_id: str
+    model_hint: ModelHint
+    start_time: float
+    metadata: Dict[str, Any]
+
 
 
 class AgentState(str, Enum):

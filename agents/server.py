@@ -33,7 +33,7 @@ from config.env_config import config, check_required_config
 # Import agent-related components
 from agents.medical_bill_agent import MedicalBillAgent
 from agents.agent_registry import AgentRegistry, TaskCapability, AgentCapabilities, AgentStatus
-from agents.base_agent import ModelHint, AgentContext
+from agents.interfaces import AgentContext, AgentResult, ModelHint
 from agents.router_agent import RouterAgent, RoutingStrategy, RoutingRequest
 from agents.redis_state import RedisStateManager
 from agents.tools.enhanced_router_agent import EnhancedRouterAgent
