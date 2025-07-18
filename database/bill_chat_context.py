@@ -142,11 +142,23 @@ async def save_bill_analysis(session: AsyncSession, user_id: str, doc_id: str, f
             }
             
             try:
-                # Create analysis with explicit transaction handling
-                result = await repo.create_analysis(analysis_data)
-                await session.commit()
-                logger.info(f"save_bill_analysis: Successfully saved bill analysis to database for doc_id={id_str}")
-                return result
+                # Try to create analysis; if duplicate, do update instead
+                try:
+                    result = await repo.create_analysis(analysis_data)
+                    await session.commit()
+                    logger.info(f"save_bill_analysis: Successfully saved bill analysis to database for doc_id={id_str}")
+                    return result
+                except Exception as create_error:
+                    if "duplicate key value violates unique constraint" in str(create_error) or "UNIQUE constraint failed" in str(create_error):
+                        logger.warning(f"Duplicate bill analysis detected for doc_id={id_str}, updating existing record instead.")
+                        # Use upsert logic: update existing record
+                        await repo.update_analysis(id_uuid, analysis_data)
+                        await session.commit()
+                        updated = await repo.get_analysis_by_id(id_uuid)
+                        logger.info(f"save_bill_analysis: Updated existing bill analysis for doc_id={id_str}")
+                        return updated
+                    else:
+                        raise create_error
             except Exception as fk_error:
                 # Check if it's a foreign key violation for user_id
                 if "violates foreign key constraint" in str(fk_error) and "bill_analyses_user_id_fkey" in str(fk_error):
