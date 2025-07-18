@@ -1,5 +1,5 @@
 """
-Generic OCR Tool - Domain-agnostic document processing and text extraction.
+Generic OCR Tool - Enhanced domain-agnostic document processing with lifecycle management.
 
 This tool provides core OCR capabilities without any domain-specific logic:
 - PDF and image processing (JPEG, PNG)
@@ -7,6 +7,7 @@ This tool provides core OCR capabilities without any domain-specific logic:
 - Table extraction and detection
 - Image preprocessing and optimization
 - Raw text and structured data output
+- Comprehensive lifecycle management and health monitoring
 
 The tool outputs raw extracted data that can be consumed by any domain-specific agent.
 """
@@ -30,6 +31,9 @@ import pandas as pd
 import cv2
 import numpy as np
 import structlog
+
+from agents.interfaces import ToolCapabilityDeclaration, AgentContext
+from .base_tool import BaseTool
 
 logger = structlog.get_logger(__name__)
 
@@ -76,9 +80,9 @@ class ExtractedDocument(BaseModel):
     metadata: Dict[str, Any] = {}
 
 
-class GenericOCRTool:
+class GenericOCRTool(BaseTool):
     """
-    Generic OCR tool for document processing without domain-specific logic.
+    Enhanced generic OCR tool with lifecycle management.
     
     Features:
     - Multi-format support (PDF, JPG, PNG)
@@ -87,6 +91,7 @@ class GenericOCRTool:
     - Table detection and extraction
     - High-quality text extraction
     - Comprehensive error handling
+    - Lifecycle management and health monitoring
     """
     
     # Supported file formats with their magic bytes
@@ -113,6 +118,13 @@ class GenericOCRTool:
         enable_camelot: bool = True
     ):
         """Initialize the generic OCR tool."""
+        super().__init__(
+            tool_name="generic_ocr",
+            tool_version="2.0.0",
+            initialization_timeout=60,  # OCR tools need more time to initialize
+            health_check_interval=300
+        )
+        
         self.supported_formats = supported_formats or ['pdf', 'jpg', 'jpeg', 'png']
         self.max_file_size = max_file_size
         self.confidence_threshold = confidence_threshold
@@ -123,8 +135,274 @@ class GenericOCRTool:
             if fmt not in self.FORMAT_SIGNATURES:
                 raise ValueError(f"Unsupported format: {fmt}")
         
-        logger.info("Initialized GenericOCRTool")
+        logger.info("Initialized GenericOCRTool with lifecycle management")
     
+    # BaseTool abstract method implementations
+    
+    async def _build_capabilities(self) -> ToolCapabilityDeclaration:
+        """Build tool capabilities declaration."""
+        return ToolCapabilityDeclaration(
+            tool_name=self.tool_name,
+            version=self.tool_version,
+            description="Generic OCR tool for document processing and text extraction",
+            supported_operations=[
+                "extract_text",
+                "extract_tables",
+                "process_document",
+                "preprocess_image"
+            ],
+            required_dependencies=[
+                "pytesseract",
+                "PIL",
+                "fitz",
+                "cv2",
+                "numpy"
+            ],
+            optional_dependencies=[
+                "camelot",
+                "pandas"
+            ],
+            resource_requirements={
+                "memory_mb": 512,
+                "cpu_cores": 2,
+                "disk_mb": 200
+            },
+            performance_characteristics={
+                "avg_execution_time_ms": 2000,
+                "max_execution_time_ms": 30000,
+                "throughput_per_second": 0.5
+            },
+            metadata={
+                "supported_formats": self.supported_formats,
+                "max_file_size_mb": self.max_file_size // (1024 * 1024),
+                "confidence_threshold": self.confidence_threshold,
+                "camelot_enabled": self.enable_camelot,
+                "supported_languages": ["english", "hindi", "bengali", "tamil"]
+            }
+        )
+    
+    async def _initialize_tool(self) -> bool:
+        """Initialize the OCR tool and verify dependencies."""
+        try:
+            # Test Tesseract installation
+            try:
+                version = pytesseract.get_tesseract_version()
+                logger.info(f"Tesseract version: {version}")
+            except Exception as e:
+                logger.error(f"Tesseract not available: {e}")
+                return False
+            
+            # Test PIL/Pillow
+            try:
+                test_image = Image.new('RGB', (100, 100), color='white')
+                test_image.close()
+            except Exception as e:
+                logger.error(f"PIL/Pillow not available: {e}")
+                return False
+            
+            # Test PyMuPDF
+            try:
+                fitz.version
+            except Exception as e:
+                logger.error(f"PyMuPDF not available: {e}")
+                return False
+            
+            # Test OpenCV
+            try:
+                cv2.__version__
+            except Exception as e:
+                logger.error(f"OpenCV not available: {e}")
+                return False
+            
+            # Test Camelot if enabled
+            if self.enable_camelot:
+                try:
+                    import camelot
+                    logger.info("Camelot table extraction enabled")
+                except ImportError:
+                    logger.warning("Camelot not available, table extraction disabled")
+                    self.enable_camelot = False
+            
+            logger.info("OCR tool initialized successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize OCR tool: {str(e)}")
+            return False
+    
+    async def _execute_operation(
+        self, 
+        operation: str, 
+        context: AgentContext, 
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Execute OCR operation."""
+        if operation == "extract_text":
+            return await self._extract_text_operation(**kwargs)
+        elif operation == "extract_tables":
+            return await self._extract_tables_operation(**kwargs)
+        elif operation == "process_document":
+            return await self._process_document_operation(**kwargs)
+        elif operation == "preprocess_image":
+            return await self._preprocess_image_operation(**kwargs)
+        else:
+            return {
+                "success": False,
+                "error": f"Unsupported operation: {operation}"
+            }
+    
+    async def _check_tool_health(self) -> Dict[str, Any]:
+        """Check OCR tool health."""
+        try:
+            health_data = {
+                "tesseract_available": False,
+                "pil_available": False,
+                "pymupdf_available": False,
+                "opencv_available": False,
+                "camelot_available": False,
+                "healthy": False
+            }
+            
+            # Check Tesseract
+            try:
+                pytesseract.get_tesseract_version()
+                health_data["tesseract_available"] = True
+            except:
+                pass
+            
+            # Check PIL
+            try:
+                test_image = Image.new('RGB', (10, 10))
+                test_image.close()
+                health_data["pil_available"] = True
+            except:
+                pass
+            
+            # Check PyMuPDF
+            try:
+                fitz.version
+                health_data["pymupdf_available"] = True
+            except:
+                pass
+            
+            # Check OpenCV
+            try:
+                cv2.__version__
+                health_data["opencv_available"] = True
+            except:
+                pass
+            
+            # Check Camelot
+            if self.enable_camelot:
+                try:
+                    import camelot
+                    health_data["camelot_available"] = True
+                except:
+                    pass
+            
+            # Overall health check
+            health_data["healthy"] = (
+                health_data["tesseract_available"] and
+                health_data["pil_available"] and
+                health_data["pymupdf_available"] and
+                health_data["opencv_available"]
+            )
+            
+            return health_data
+            
+        except Exception as e:
+            return {
+                "healthy": False,
+                "error": str(e)
+            }
+    
+    async def _shutdown_tool(self) -> bool:
+        """Shutdown OCR tool."""
+        try:
+            # OCR tools don't typically need special shutdown procedures
+            # but we can clean up any temporary files or resources here
+            logger.info("OCR tool shutdown completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"OCR tool shutdown error: {str(e)}")
+            return False
+    
+    # Helper methods for operations
+    
+    async def _extract_text_operation(self, **kwargs) -> Dict[str, Any]:
+        """Extract text operation."""
+        file_content = kwargs.get('file_content')
+        doc_id = kwargs.get('doc_id', 'unknown')
+        language = kwargs.get('language', 'english')
+        file_format = kwargs.get('file_format')
+        
+        if not file_content:
+            return {
+                "success": False,
+                "error": "No file content provided"
+            }
+        
+        result = await self.__call__(
+            file_content=file_content,
+            doc_id=doc_id,
+            language=language,
+            file_format=file_format
+        )
+        
+        # Extract only text from the result
+        if result.get('success'):
+            return {
+                "success": True,
+                "raw_text": result.get('raw_text', ''),
+                "pages": result.get('pages', []),
+                "language_detected": result.get('language_detected', language),
+                "tool_name": self.tool_name
+            }
+        
+        return result
+    
+    async def _extract_tables_operation(self, **kwargs) -> Dict[str, Any]:
+        """Extract tables operation."""
+        file_content = kwargs.get('file_content')
+        doc_id = kwargs.get('doc_id', 'unknown')
+        
+        if not file_content:
+            return {
+                "success": False,
+                "error": "No file content provided"
+            }
+        
+        result = await self.__call__(
+            file_content=file_content,
+            doc_id=doc_id,
+            language='english',
+            file_format=kwargs.get('file_format')
+        )
+        
+        # Extract only tables from the result
+        if result.get('success'):
+            return {
+                "success": True,
+                "tables": result.get('tables', []),
+                "tool_name": self.tool_name
+            }
+        
+        return result
+    
+    async def _process_document_operation(self, **kwargs) -> Dict[str, Any]:
+        """Process complete document operation."""
+        return await self.__call__(**kwargs)
+    
+    async def _preprocess_image_operation(self, **kwargs) -> Dict[str, Any]:
+        """Preprocess image operation."""
+        # This would implement image preprocessing without OCR
+        return {
+            "success": False,
+            "error": "Image preprocessing operation not yet implemented"
+        }
+    
+    # Legacy method for backward compatibility
     async def __call__(
         self,
         file_content: bytes,

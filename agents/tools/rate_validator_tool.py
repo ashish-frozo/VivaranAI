@@ -1,8 +1,8 @@
 """
-Rate Validator Tool - Async wrapper for RateValidator.
+Rate Validator Tool - Enhanced tool with lifecycle management.
 
-This tool wraps the existing RateValidator component to make it compatible
-with the OpenAI Agent SDK framework for medical bill rate validation.
+This tool provides comprehensive rate validation capabilities with proper
+lifecycle management, error handling, and performance monitoring.
 """
 
 import asyncio
@@ -11,6 +11,8 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 from medbillguardagent.rate_validator import RateValidator
+from agents.interfaces import ToolCapabilityDeclaration, AgentContext
+from .base_tool import BaseTool
 
 logger = structlog.get_logger(__name__)
 
@@ -22,9 +24,9 @@ class RateValidatorInput(BaseModel):
     validation_sources: List[str] = Field(default=["cghs", "esi"], description="Validation sources to use")
 
 
-class RateValidatorTool:
+class RateValidatorTool(BaseTool):
     """
-    Async tool wrapper for RateValidator.
+    Enhanced rate validator tool with lifecycle management.
     
     Provides rate validation capabilities including:
     - CGHS rate validation
@@ -36,9 +38,176 @@ class RateValidatorTool:
     
     def __init__(self, reference_data_loader=None):
         """Initialize the rate validator tool."""
-        self.validator = RateValidator(reference_loader=reference_data_loader)
-        logger.info("Initialized RateValidatorTool")
+        super().__init__(
+            tool_name="rate_validator",
+            tool_version="2.0.0",
+            initialization_timeout=30,
+            health_check_interval=300
+        )
+        self.reference_data_loader = reference_data_loader
+        self.validator: Optional[RateValidator] = None
+        
+        logger.info("Initialized RateValidatorTool with lifecycle management")
     
+    # BaseTool abstract method implementations
+    
+    async def _build_capabilities(self) -> ToolCapabilityDeclaration:
+        """Build tool capabilities declaration."""
+        return ToolCapabilityDeclaration(
+            tool_name=self.tool_name,
+            version=self.tool_version,
+            description="Validates medical charges against CGHS, ESI, NPPA and state reference rates",
+            supported_operations=[
+                "validate_rates",
+                "check_overcharges",
+                "generate_red_flags"
+            ],
+            required_dependencies=[
+                "medbillguardagent.rate_validator"
+            ],
+            optional_dependencies=[
+                "reference_data_loader"
+            ],
+            resource_requirements={
+                "memory_mb": 256,
+                "cpu_cores": 1,
+                "disk_mb": 100
+            },
+            performance_characteristics={
+                "avg_execution_time_ms": 500,
+                "max_execution_time_ms": 5000,
+                "throughput_per_second": 10
+            },
+            metadata={
+                "supported_validation_sources": ["cghs", "esi", "nppa", "state"],
+                "supported_document_types": ["medical_bill", "pharmacy_invoice"],
+                "rate_validation_accuracy": 0.95
+            }
+        )
+    
+    async def _initialize_tool(self) -> bool:
+        """Initialize the rate validator."""
+        try:
+            self.validator = RateValidator(reference_loader=self.reference_data_loader)
+            
+            # Test validator functionality
+            test_items = ["Consultation"]
+            test_costs = {"Consultation": 100.0}
+            
+            # Quick validation test
+            await self.validator.validate_item_rates(test_items, test_costs)
+            
+            logger.info("Rate validator initialized successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize rate validator: {str(e)}")
+            return False
+    
+    async def _execute_operation(
+        self, 
+        operation: str, 
+        context: AgentContext, 
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Execute rate validation operation."""
+        if operation == "validate_rates":
+            return await self._validate_rates(**kwargs)
+        elif operation == "check_overcharges":
+            return await self._check_overcharges(**kwargs)
+        elif operation == "generate_red_flags":
+            return await self._generate_red_flags(**kwargs)
+        else:
+            return {
+                "success": False,
+                "error": f"Unsupported operation: {operation}"
+            }
+    
+    async def _check_tool_health(self) -> Dict[str, Any]:
+        """Check rate validator health."""
+        try:
+            if not self.validator:
+                return {
+                    "validator_status": "not_initialized",
+                    "healthy": False
+                }
+            
+            # Test basic functionality
+            test_items = ["Test Item"]
+            test_costs = {"Test Item": 50.0}
+            
+            await self.validator.validate_item_rates(test_items, test_costs)
+            
+            return {
+                "validator_status": "healthy",
+                "reference_data_loaded": bool(self.reference_data_loader),
+                "healthy": True
+            }
+            
+        except Exception as e:
+            return {
+                "validator_status": "error",
+                "error": str(e),
+                "healthy": False
+            }
+    
+    async def _shutdown_tool(self) -> bool:
+        """Shutdown rate validator."""
+        try:
+            if self.validator:
+                # Cleanup validator resources if needed
+                self.validator = None
+            
+            logger.info("Rate validator shutdown completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Rate validator shutdown error: {str(e)}")
+            return False
+    
+    # Helper methods for operations
+    
+    async def _validate_rates(self, **kwargs) -> Dict[str, Any]:
+        """Validate rates operation."""
+        line_items = kwargs.get('line_items', [])
+        state_code = kwargs.get('state_code')
+        validation_sources = kwargs.get('validation_sources', ['cghs', 'esi'])
+        dynamic_data = kwargs.get('dynamic_data')
+        
+        return await self.__call__(
+            line_items=line_items,
+            state_code=state_code,
+            validation_sources=validation_sources,
+            dynamic_data=dynamic_data
+        )
+    
+    async def _check_overcharges(self, **kwargs) -> Dict[str, Any]:
+        """Check for overcharges operation."""
+        result = await self._validate_rates(**kwargs)
+        if result.get('success'):
+            # Filter for overcharge red flags only
+            overcharge_flags = [
+                flag for flag in result.get('red_flags', [])
+                if flag.get('type') == 'overcharge'
+            ]
+            result['red_flags'] = overcharge_flags
+            result['overcharge_count'] = len(overcharge_flags)
+        return result
+    
+    async def _generate_red_flags(self, **kwargs) -> Dict[str, Any]:
+        """Generate red flags operation."""
+        result = await self._validate_rates(**kwargs)
+        if result.get('success'):
+            # Return only red flags
+            return {
+                'success': True,
+                'red_flags': result.get('red_flags', []),
+                'red_flag_count': len(result.get('red_flags', [])),
+                'tool_name': self.tool_name
+            }
+        return result
+    
+    # Legacy method for backward compatibility
     async def __call__(
         self,
         line_items: List[Dict[str, Any]],

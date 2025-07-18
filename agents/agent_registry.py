@@ -20,6 +20,7 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Gauge, Counter
 
 from .base_agent import BaseAgent, AgentContext, ModelHint
+from .interfaces import IAgent, AgentCapabilityDeclaration
 from .redis_state import RedisStateManager
 
 logger = structlog.get_logger(__name__)
@@ -204,7 +205,85 @@ class AgentRegistry:
         await self.state_manager.disconnect()
         logger.info("Agent registry stopped")
     
+    async def register_agent_self(
+        self,
+        agent: IAgent,
+        health_endpoint: Optional[str] = None
+    ) -> bool:
+        """
+        Self-register an agent using its built-in capabilities.
+        
+        Args:
+            agent: IAgent instance to register
+            health_endpoint: Optional health check endpoint
+            
+        Returns:
+            True if registration successful
+        """
+        try:
+            # Get capabilities from agent
+            capabilities_decl = await agent.get_capabilities()
+            
+            # Convert to legacy format for compatibility
+            legacy_capabilities = AgentCapabilities(
+                supported_tasks=[TaskCapability(task) for task in capabilities_decl.supported_tasks],
+                max_concurrent_requests=capabilities_decl.max_concurrent_requests,
+                preferred_model_hints=capabilities_decl.preferred_model_hints,
+                processing_time_ms_avg=capabilities_decl.processing_time_ms_avg,
+                cost_per_request_rupees=capabilities_decl.cost_per_request_rupees,
+                confidence_threshold=capabilities_decl.confidence_threshold,
+                supported_document_types=capabilities_decl.supported_document_types,
+                supported_languages=capabilities_decl.supported_languages
+            )
+            
+            # Use legacy registration method
+            return await self.register_agent_legacy(
+                agent=agent,
+                capabilities=legacy_capabilities,
+                health_endpoint=health_endpoint
+            )
+            
+        except Exception as e:
+            logger.error(
+                "Failed to self-register agent",
+                agent_id=getattr(agent, 'agent_id', 'unknown'),
+                error=str(e),
+                exc_info=True
+            )
+            return False
+    
     async def register_agent(
+        self,
+        agent,
+        capabilities: Optional[AgentCapabilities] = None,
+        health_endpoint: Optional[str] = None
+    ) -> bool:
+        """
+        Universal agent registration method that supports both legacy and new interfaces.
+        
+        Args:
+            agent: Agent instance (BaseAgent or IAgent)
+            capabilities: Optional legacy capabilities (for BaseAgent)
+            health_endpoint: Optional health check endpoint
+            
+        Returns:
+            True if registration successful
+        """
+        # Check if agent implements IAgent interface
+        if hasattr(agent, 'get_capabilities') and callable(getattr(agent, 'get_capabilities')):
+            # Use self-registration for IAgent
+            return await self.register_agent_self(agent, health_endpoint)
+        elif capabilities is not None:
+            # Use legacy registration for BaseAgent
+            return await self.register_agent_legacy(agent, capabilities, health_endpoint)
+        else:
+            logger.error(
+                "Cannot register agent: no capabilities provided and agent doesn't implement IAgent",
+                agent_id=getattr(agent, 'agent_id', 'unknown')
+            )
+            return False
+    
+    async def register_agent_legacy(
         self,
         agent: BaseAgent,
         capabilities: AgentCapabilities,
@@ -336,6 +415,104 @@ class AgentRegistry:
                     exc_info=True
                 )
                 return False
+    
+    async def discover_agents_by_task(
+        self,
+        required_tasks: List[str],
+        model_hint: ModelHint = ModelHint.STANDARD,
+        max_agents: int = 5,
+        document_type: Optional[str] = None,
+        language: Optional[str] = None
+    ) -> List[AgentRegistration]:
+        """
+        Enhanced agent discovery by task requirements.
+        
+        Args:
+            required_tasks: List of task types needed
+            model_hint: Preferred model complexity
+            max_agents: Maximum agents to return
+            document_type: Optional document type filter
+            language: Optional language filter
+            
+        Returns:
+            List of suitable agent registrations, sorted by suitability
+        """
+        with tracer.start_as_current_span("discover_agents_by_task") as span:
+            span.set_attributes({
+                "required_tasks": str(required_tasks),
+                "model_hint": model_hint.value,
+                "max_agents": max_agents,
+                "document_type": document_type or "any",
+                "language": language or "any"
+            })
+            
+            try:
+                await self._refresh_cache_if_needed()
+                
+                suitable_agents = []
+                
+                for registration in self._agent_cache.values():
+                    if registration.status != AgentStatus.ONLINE:
+                        continue
+                    
+                    # Check task compatibility
+                    agent_tasks = set(registration.capabilities.supported_tasks)
+                    required_task_set = set(required_tasks)
+                    
+                    if not required_task_set.issubset(agent_tasks):
+                        continue
+                    
+                    # Check document type compatibility
+                    if (document_type and 
+                        document_type not in registration.capabilities.supported_document_types):
+                        continue
+                    
+                    # Check language compatibility
+                    if (language and 
+                        language not in registration.capabilities.supported_languages):
+                        continue
+                    
+                    # Check model hint compatibility
+                    if model_hint not in registration.capabilities.preferred_model_hints:
+                        continue
+                    
+                    # Calculate suitability score
+                    score = self._calculate_enhanced_suitability_score(
+                        registration, required_tasks, model_hint, document_type, language
+                    )
+                    
+                    suitable_agents.append((registration, score))
+                
+                # Sort by suitability score (descending)
+                suitable_agents.sort(key=lambda x: x[1], reverse=True)
+                
+                # Return top agents
+                result = [agent for agent, _ in suitable_agents[:max_agents]]
+                
+                # Update metrics
+                ROUTING_DECISIONS.labels(
+                    routing_strategy="task_based",
+                    agent_selected=result[0].agent_id if result else "none"
+                ).inc()
+                
+                logger.info(
+                    "Agent discovery completed",
+                    required_tasks=required_tasks,
+                    agents_found=len(result),
+                    top_agent=result[0].agent_id if result else None
+                )
+                
+                return result
+                
+            except Exception as e:
+                logger.error(
+                    "Agent discovery failed",
+                    required_tasks=required_tasks,
+                    error=str(e),
+                    exc_info=True
+                )
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                return []
     
     async def discover_agents(
         self,
@@ -492,6 +669,62 @@ class AgentRegistry:
             return False
         
         return True
+    
+    def _calculate_enhanced_suitability_score(
+        self,
+        registration: AgentRegistration,
+        required_tasks: List[str],
+        model_hint: ModelHint,
+        document_type: Optional[str] = None,
+        language: Optional[str] = None
+    ) -> float:
+        """
+        Calculate enhanced suitability score for agent selection.
+        
+        Args:
+            registration: Agent registration to score
+            required_tasks: Required task types
+            model_hint: Preferred model complexity
+            document_type: Optional document type requirement
+            language: Optional language requirement
+            
+        Returns:
+            Suitability score (0.0 to 1.0)
+        """
+        score = 0.0
+        
+        # Task coverage score (40% weight)
+        agent_tasks = set(registration.capabilities.supported_tasks)
+        required_task_set = set(required_tasks)
+        task_coverage = len(required_task_set.intersection(agent_tasks)) / len(required_task_set)
+        score += task_coverage * 0.4
+        
+        # Model hint compatibility (20% weight)
+        if model_hint in registration.capabilities.preferred_model_hints:
+            score += 0.2
+        
+        # Performance metrics (20% weight)
+        # Lower response time and higher success rate = better score
+        response_time_score = max(0, 1 - (registration.avg_response_time_ms / 10000))  # Normalize to 10s max
+        success_rate = 1.0 - (registration.total_errors / max(registration.total_requests, 1))
+        performance_score = (response_time_score + success_rate) / 2
+        score += performance_score * 0.2
+        
+        # Document type compatibility (10% weight)
+        if document_type:
+            if document_type in registration.capabilities.supported_document_types:
+                score += 0.1
+        else:
+            score += 0.1  # No specific requirement
+        
+        # Language compatibility (10% weight)
+        if language:
+            if language in registration.capabilities.supported_languages:
+                score += 0.1
+        else:
+            score += 0.1  # No specific requirement
+        
+        return min(score, 1.0)
     
     def _calculate_suitability_score(
         self,

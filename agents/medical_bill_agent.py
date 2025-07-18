@@ -15,8 +15,10 @@ from typing import Dict, Any, List, Optional
 from opentelemetry import trace
 
 from agents.base_agent import BaseAgent, AgentContext, AgentResult, ModelHint
-from agents.tools import (
-    RateValidatorTool,
+from agents.interfaces import AgentCapabilityDeclaration, ITool
+from agents.tools.rate_validator_tool import RateValidatorTool
+from agents.tools.generic_ocr_tool import GenericOCRTool
+from agents.tools.production_integration import (
     DuplicateDetectorTool,
     ProhibitedDetectorTool,
     ConfidenceScorerTool,
@@ -52,8 +54,9 @@ class MedicalBillAgent(BaseAgent):
         # Store OpenAI API key for AI fallback analysis
         self.openai_api_key = openai_api_key
         
-        # Initialize all analysis tools
-        self.rate_validator_tool = RateValidatorTool(reference_data_loader=reference_data_loader)
+        # Tools will be managed by production integration
+        self.rate_validator = None
+        self.ocr_tool = None
         self.duplicate_detector_tool = DuplicateDetectorTool()
         self.prohibited_detector_tool = ProhibitedDetectorTool()
         self.confidence_scorer_tool = ConfidenceScorerTool(openai_api_key=openai_api_key)
@@ -78,30 +81,112 @@ class MedicalBillAgent(BaseAgent):
             scoring. Use these tools to provide comprehensive analysis and actionable recommendations.""",
             tools=tools,
             redis_url=redis_url,
-            default_model="gpt-4o"
+            default_model="gpt-4o",
+            version="2.0.0"  # Updated for new interface compliance
         )
+        
+        # Store tool instances for IAgent interface
+        self._tool_instances = [
+            self.rate_validator_tool,
+            self.duplicate_detector_tool,
+            self.prohibited_detector_tool,
+            self.confidence_scorer_tool
+        ]
+        if self.smart_data_tool:
+            self._tool_instances.append(self.smart_data_tool)
         
         logger.info("Initialized MedicalBillAgent with all analysis tools")
     
-    async def start(self):
-        await super().start()
-        await agent_registry.register_agent(
-            agent=self,
-            capabilities=AgentCapabilities(
-                supported_tasks=[
-                    TaskCapability.MEDICAL_ANALYSIS,
-                    TaskCapability.RATE_VALIDATION
-                ],
-                max_concurrent_requests=5,
-                preferred_model_hints=[ModelHint.STANDARD],
-                processing_time_ms_avg=500,
-                cost_per_request_rupees=10.0,
-                confidence_threshold=0.8,
-                supported_document_types=["medical_bill"],
-                supported_languages=["english"],
-            ),
-            health_endpoint=None
+    async def _build_capabilities(self) -> AgentCapabilityDeclaration:
+        """Build enhanced capabilities for medical bill analysis."""
+        return AgentCapabilityDeclaration(
+            supported_tasks=[
+                "medical_bill_analysis",
+                "rate_validation", 
+                "duplicate_detection",
+                "prohibited_item_detection",
+                "confidence_scoring",
+                "overcharge_detection"
+            ],
+            supported_document_types=[
+                "medical_bill",
+                "pharmacy_invoice", 
+                "hospital_bill",
+                "diagnostic_report"
+            ],
+            supported_languages=["english", "hindi"],
+            max_concurrent_requests=5,
+            preferred_model_hints=[ModelHint.STANDARD, ModelHint.PREMIUM],
+            processing_time_ms_avg=2000,  # More realistic for complex analysis
+            cost_per_request_rupees=15.0,  # Higher cost for comprehensive analysis
+            confidence_threshold=0.8,
+            requires_tools=[
+                "rate_validator",
+                "duplicate_detector", 
+                "prohibited_detector",
+                "confidence_scorer"
+            ],
+            provides_tools=[
+                "medical_analysis",
+                "smart_data_integration"
+            ],
+            version=self.version,
+            metadata={
+                "agent_type": "MedicalBillAgent",
+                "specialization": "Indian medical bill analysis",
+                "government_rates_supported": ["CGHS", "ESI", "NPPA"],
+                "analysis_features": [
+                    "OCR processing",
+                    "Rate validation",
+                    "Duplicate detection", 
+                    "Prohibited item detection",
+                    "AI-powered fallback analysis",
+                    "Smart data integration"
+                ]
+            }
         )
+    
+    async def initialize(self) -> bool:
+        """Initialize the agent and its tools."""
+        try:
+            logger.info("Initializing MedicalBillAgent")
+            
+            # Initialize production integration
+            success = await production_integration.initialize_production_tools()
+            if not success:
+                logger.error("Failed to initialize production tools")
+                return False
+            
+            # Initialize remaining tools that are not managed by production integration
+            tools_to_initialize = [
+                self.duplicate_detector_tool,
+                self.prohibited_detector_tool,
+                self.confidence_scorer_tool
+            ]
+            
+            for tool in tools_to_initialize:
+                if hasattr(tool, 'initialize'):
+                    success = await tool.initialize()
+                    if not success:
+                        logger.error(f"Failed to initialize tool: {tool.__class__.__name__}")
+                        return False
+            
+            self.state = AgentState.READY
+            logger.info("MedicalBillAgent initialized successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize MedicalBillAgent: {str(e)}")
+            self.state = AgentState.ERROR
+            return False
+    
+    async def start(self):
+        """Legacy start method - use initialize() instead."""
+        logger.warning(
+            "Using deprecated start() method - use initialize() instead",
+            agent_id=self.agent_id
+        )
+        return await self.initialize()
     
     async def process_task(self, context: AgentContext, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -161,40 +246,45 @@ class MedicalBillAgent(BaseAgent):
                     )
                     return ai_result
                 
-                # Step 2: Dynamic Data Fetching (if available)
-                scraped_data = None
-                if self.smart_data_tool:
-                    logger.info("Step 2a: Fetching dynamic data", doc_id=doc_id)
-                    smart_data_result = await self.smart_data_tool(
-                        document_type="medical_bill",
-                        raw_text=raw_text,
-                        state_code=state_code
+                # Validate rates using the production-managed rate validator tool
+                try:
+                    rate_validation_result = await production_integration.execute_tool_with_context(
+                        tool_name="rate_validator",
+                        operation="validate_rates",
+                        context=context,
+                        line_items=line_items,
+                        metadata={"state_code": state_code, "insurance_type": insurance_type}
                     )
-                    if smart_data_result.get("success"):
-                        scraped_data = smart_data_result.get("scraped_data")
-
-                # Step 2b: Rate Validation
-                logger.info("Step 2b: Validating rates", doc_id=doc_id, items_count=len(line_items))
-                rate_result = await self.rate_validator_tool(
-                    line_items=line_items,
-                    state_code=state_code,
-                    validation_sources=["cghs", "esi"],
-                    dynamic_data=scraped_data
-                )
-                
-                # Step 3: Duplicate Detection
-                logger.info("Step 3: Detecting duplicates", doc_id=doc_id)
-                duplicate_result = await self.duplicate_detector_tool(
-                    line_items=line_items,
-                    similarity_threshold=0.8
-                )
-                
-                # Step 4: Prohibited Item Detection
-                logger.info("Step 4: Detecting prohibited items", doc_id=doc_id)
-                prohibited_result = await self.prohibited_detector_tool(
-                    line_items=line_items,
-                    insurance_type=insurance_type
-                )
+                    
+                    if rate_validation_result.get("success"):
+                        validation_results = rate_validation_result.get("validation_results", [])
+                        overcharges = rate_validation_result.get("overcharges", [])
+                        
+                        logger.info(
+                            "Rate validation completed",
+                            agent_id=self.agent_id,
+                            validated_items=len(validation_results),
+                            overcharges_found=len(overcharges),
+                            production_metadata=rate_validation_result.get("production_metadata")
+                        )
+                    else:
+                        logger.warning(
+                            "Rate validation failed",
+                            agent_id=self.agent_id,
+                            error=rate_validation_result.get("error")
+                        )
+                        validation_results = []
+                        overcharges = []
+                        
+                except Exception as e:
+                    logger.error(
+                        "Rate validation error",
+                        agent_id=self.agent_id,
+                        error=str(e),
+                        exc_info=True
+                    )
+                    validation_results = []
+                    overcharges = []
                 
                 # Collect all red flags
                 all_red_flags = []

@@ -21,6 +21,12 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Histogram, Gauge
 import redis.asyncio as redis
 
+# Import new interfaces
+from .interfaces import (
+    IAgent, ITool, AgentState, AgentCapabilityDeclaration, 
+    BaseLifecycleManager, LifecycleHooks
+)
+
 # OpenAI Agents SDK imports (temporarily disabled for testing)
 # from agents import Agent as OpenAIAgent, Runner
 # from agents.tools import function_tool
@@ -115,9 +121,9 @@ class CPUTimeoutError(Exception):
     pass
 
 
-class BaseAgent(ABC):
+class BaseAgent(ABC, BaseLifecycleManager):
     """
-    Base class for all MedBillGuard agents.
+    Base class for all MedBillGuard agents implementing IAgent interface.
     
     Provides:
     - OpenAI SDK integration with cost tracking
@@ -125,6 +131,8 @@ class BaseAgent(ABC):
     - Redis state management
     - CPU time slice enforcement (150ms)
     - Standardized error handling
+    - Enhanced lifecycle management
+    - Interface compliance validation
     """
     
     def __init__(
@@ -134,10 +142,16 @@ class BaseAgent(ABC):
         instructions: str,
         tools: Optional[List[Callable]] = None,
         redis_url: str = "redis://localhost:6379/1",
-        default_model: str = "gpt-4o"
+        default_model: str = "gpt-4o",
+        version: str = "1.0.0",
+        lifecycle_hooks: Optional[LifecycleHooks] = None
     ):
+        # Initialize lifecycle manager
+        BaseLifecycleManager.__init__(self, lifecycle_hooks)
+        
         self.agent_id = agent_id
         self.name = name
+        self.version = version
         self.instructions = instructions
         self.tools = tools or []
         self.redis_url = redis_url
@@ -149,35 +163,230 @@ class BaseAgent(ABC):
         # OpenAI Agent (will be created per request)
         self._openai_agent = None
         
+        # Agent-specific state
+        self._capabilities: Optional[AgentCapabilityDeclaration] = None
+        self._tool_instances: List[ITool] = []
+        
         logger.info(
             "Initialized BaseAgent",
             agent_id=agent_id,
             name=name,
+            version=version,
             tools_count=len(self.tools)
         )
     
-    async def start(self):
-        """Initialize Redis connection and prepare agent for requests."""
+    # IAgent interface implementation
+    
+    async def get_capabilities(self) -> AgentCapabilityDeclaration:
+        """Get agent capabilities and metadata."""
+        if self._capabilities is None:
+            self._capabilities = await self._build_capabilities()
+        return self._capabilities
+    
+    async def warm_up(self) -> bool:
+        """Warm up the agent (pre-load models, cache data, etc.)."""
         try:
-            self.redis_client = redis.from_url(self.redis_url)
-            await self.redis_client.ping()
+            # Call parent lifecycle method
+            success = await BaseLifecycleManager.warm_up(self)
+            if not success:
+                return False
             
-            logger.info("Agent started successfully", agent_id=self.agent_id)
+            # Agent-specific warm-up logic
+            await self._warm_up_models()
+            await self._warm_up_tools()
+            
+            logger.info("Agent warmed up successfully", agent_id=self.agent_id)
+            return True
             
         except Exception as e:
             logger.error(
-                "Failed to start agent",
+                "Agent warm-up failed",
                 agent_id=self.agent_id,
                 error=str(e),
                 exc_info=True
             )
-            raise
+            await self.handle_error(e)
+            return False
+    
+    async def activate(self) -> bool:
+        """Activate the agent for processing."""
+        try:
+            # Call parent lifecycle method
+            success = await BaseLifecycleManager.activate(self)
+            if not success:
+                return False
+            
+            # Agent-specific activation logic
+            await self._register_with_registry()
+            
+            logger.info("Agent activated successfully", agent_id=self.agent_id)
+            return True
+            
+        except Exception as e:
+            logger.error(
+                "Agent activation failed",
+                agent_id=self.agent_id,
+                error=str(e),
+                exc_info=True
+            )
+            await self.handle_error(e)
+            return False
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Check agent health status."""
+        try:
+            health_status = {
+                "agent_id": self.agent_id,
+                "name": self.name,
+                "version": self.version,
+                "state": self.state.value,
+                "timestamp": datetime.utcnow().isoformat(),
+                "redis_connected": False,
+                "tools_count": len(self.tools),
+                "tool_instances_count": len(self._tool_instances)
+            }
+            
+            # Check Redis connection
+            if self.redis_client:
+                try:
+                    await self.redis_client.ping()
+                    health_status["redis_connected"] = True
+                except Exception:
+                    health_status["redis_connected"] = False
+            
+            # Check tool health
+            tool_health = []
+            for tool in self._tool_instances:
+                try:
+                    tool_status = await tool.health_check()
+                    tool_health.append(tool_status)
+                except Exception as e:
+                    tool_health.append({
+                        "tool_name": getattr(tool, 'tool_name', 'unknown'),
+                        "status": "error",
+                        "error": str(e)
+                    })
+            
+            health_status["tools_health"] = tool_health
+            
+            return health_status
+            
+        except Exception as e:
+            logger.error(
+                "Health check failed",
+                agent_id=self.agent_id,
+                error=str(e),
+                exc_info=True
+            )
+            return {
+                "agent_id": self.agent_id,
+                "state": "error",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+    
+    async def self_register(self) -> bool:
+        """Register agent with the registry."""
+        try:
+            from .agent_registry import agent_registry
+            
+            capabilities = await self.get_capabilities()
+            success = await agent_registry.register_agent(self, capabilities)
+            
+            if success:
+                logger.info("Agent self-registered successfully", agent_id=self.agent_id)
+            else:
+                logger.warning("Agent self-registration failed", agent_id=self.agent_id)
+            
+            return success
+            
+        except Exception as e:
+            logger.error(
+                "Agent self-registration error",
+                agent_id=self.agent_id,
+                error=str(e),
+                exc_info=True
+            )
+            return False
+    
+    async def get_tools(self) -> List[ITool]:
+        """Get tools provided by this agent."""
+        return self._tool_instances
+    
+    # Enhanced lifecycle methods
+    
+    async def initialize(self) -> bool:
+        """Initialize the agent with enhanced lifecycle management."""
+        try:
+            # Call parent lifecycle method
+            success = await BaseLifecycleManager.initialize(self)
+            if not success:
+                return False
+            
+            # Initialize Redis connection
+            self.redis_client = redis.from_url(self.redis_url)
+            await self.redis_client.ping()
+            
+            # Initialize tools
+            await self._initialize_tools()
+            
+            logger.info("Agent initialized successfully", agent_id=self.agent_id)
+            return True
+            
+        except Exception as e:
+            logger.error(
+                "Agent initialization failed",
+                agent_id=self.agent_id,
+                error=str(e),
+                exc_info=True
+            )
+            await self.handle_error(e)
+            return False
+    
+    async def shutdown(self) -> bool:
+        """Shutdown the agent with enhanced lifecycle management."""
+        try:
+            # Call parent lifecycle method
+            success = await BaseLifecycleManager.shutdown(self)
+            if not success:
+                return False
+            
+            # Shutdown tools
+            await self._shutdown_tools()
+            
+            # Cleanup Redis connection
+            if self.redis_client:
+                await self.redis_client.close()
+            
+            logger.info("Agent shutdown successfully", agent_id=self.agent_id)
+            return True
+            
+        except Exception as e:
+            logger.error(
+                "Agent shutdown failed",
+                agent_id=self.agent_id,
+                error=str(e),
+                exc_info=True
+            )
+            return False
+    
+    # Legacy methods for backward compatibility
+    
+    async def start(self):
+        """Legacy start method - use initialize() instead."""
+        logger.warning(
+            "Using deprecated start() method - use initialize() instead",
+            agent_id=self.agent_id
+        )
+        return await self.initialize()
     
     async def stop(self):
-        """Cleanup Redis connection."""
-        if self.redis_client:
-            await self.redis_client.close()
-        logger.info("Agent stopped", agent_id=self.agent_id)
+        """Legacy stop method - use shutdown() instead."""
+        logger.warning(
+            "Using deprecated stop() method - use shutdown() instead",
+            agent_id=self.agent_id
+        )
+        return await self.shutdown()
     
     def select_model(self, model_hint: ModelHint) -> str:
         """
@@ -467,13 +676,68 @@ class BaseAgent(ABC):
     @abstractmethod
     async def process_task(self, context: AgentContext, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process agent-specific task - must be implemented by subclasses.
+        Process a task with the given context and data.
         
         Args:
             context: Agent execution context
-            task_data: Task-specific data
+            task_data: Task-specific data and parameters
             
         Returns:
             Dict containing task results
         """
-        pass 
+        pass
+    
+    # Helper methods for interface implementation
+    
+    async def _build_capabilities(self) -> AgentCapabilityDeclaration:
+        """Build agent capability declaration - to be overridden by subclasses."""
+        return AgentCapabilityDeclaration(
+            supported_tasks=["general"],
+            supported_document_types=["text"],
+            supported_languages=["en"],
+            max_concurrent_requests=10,
+            preferred_model_hints=[ModelHint.STANDARD],
+            processing_time_ms_avg=1000,
+            cost_per_request_rupees=0.10,
+            confidence_threshold=0.8,
+            requires_tools=[],
+            provides_tools=[],
+            version=self.version,
+            metadata={"agent_type": self.__class__.__name__}
+        )
+    
+    async def _warm_up_models(self):
+        """Warm up models - to be overridden by subclasses."""
+        pass
+    
+    async def _warm_up_tools(self):
+        """Warm up tools - to be overridden by subclasses."""
+        for tool in self._tool_instances:
+            try:
+                await tool.initialize()
+            except Exception as e:
+                logger.warning(
+                    "Tool warm-up failed",
+                    tool_name=getattr(tool, 'tool_name', 'unknown'),
+                    error=str(e)
+                )
+    
+    async def _register_with_registry(self):
+        """Register with agent registry."""
+        await self.self_register()
+    
+    async def _initialize_tools(self):
+        """Initialize tool instances - to be overridden by subclasses."""
+        pass
+    
+    async def _shutdown_tools(self):
+        """Shutdown tool instances."""
+        for tool in self._tool_instances:
+            try:
+                await tool.shutdown()
+            except Exception as e:
+                logger.warning(
+                    "Tool shutdown failed",
+                    tool_name=getattr(tool, 'tool_name', 'unknown'),
+                    error=str(e)
+                )
