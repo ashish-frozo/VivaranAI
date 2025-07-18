@@ -20,6 +20,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Histogram, Gauge
 import redis.asyncio as redis
+from .interfaces import ModelHint
 
 # Import new interfaces
 from .interfaces import (
