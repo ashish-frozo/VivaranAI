@@ -76,4 +76,5 @@ lxml==4.9.3  # XML/HTML parser for BeautifulSoup
 authlib==1.2.1
 email-validator==2.2.0
 
+psutil==5.9.8
 # Force Railway rebuild - Thu Jul 10 12:13:25 IST 2025
