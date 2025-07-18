@@ -239,27 +239,6 @@ class AnalysisResponse(BaseModel):
     verdict: str
     total_bill_amount: float
     total_overcharge: float
-    confidence_score: float
-    red_flags: list
-    recommendations: list
-    processing_time_seconds: float
-    
-    # Debug and analysis metadata fields
-    document_type: Optional[str] = None
-    agent_type: Optional[str] = None
-    routing_confidence: Optional[float] = None
-    ocr_text: Optional[str] = None
-    raw_text: Optional[str] = None
-    rawText: Optional[str] = None
-    debug_data: Optional[Dict[str, Any]] = None
-    analysis: Optional[Dict[str, Any]] = None
-    document_processing: Optional[Dict[str, Any]] = None
-    rate_validation: Optional[Dict[str, Any]] = None
-    duplicate_detection: Optional[Dict[str, Any]] = None
-    prohibited_detection: Optional[Dict[str, Any]] = None
-    analysis_summary: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    query_response: Optional[str] = None
 
 
 class EnhancedAnalysisRequest(BaseModel):
@@ -270,6 +249,7 @@ class EnhancedAnalysisRequest(BaseModel):
     file_format: Optional[str] = Field(default=None, description="File format hint")
     routing_strategy: str = Field(default="capability_based", description="Routing strategy")
     priority: str = Field(default="normal", description="Processing priority")
+    query: Optional[str] = Field(default=None, description="Optional query to ask about the document")
 
 
 class EnhancedAnalysisResponse(BaseModel):
@@ -280,6 +260,7 @@ class EnhancedAnalysisResponse(BaseModel):
     final_result: Dict[str, Any]
     total_processing_time_ms: int
     error: Optional[str] = None
+    query_response: Optional[str] = None
 
 
 class MetricsResponse(BaseModel):
@@ -1844,6 +1825,61 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest, background
                     error=str(e)
                 )
         
+        # Handle user query if provided
+        query_response = None
+        if request.query and result.get("success", False):
+            try:
+                # Extract OCR text from the result
+                ocr_text = result.get("final_result", {}).get("raw_text", "")
+                
+                if ocr_text:
+                    from openai import AsyncOpenAI
+                    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                    
+                    query_prompt = f"""You are a medical bill analysis assistant. A user has uploaded a medical bill and asked a question about it.
+
+Document Content:
+{ocr_text[:1500]}...
+
+User Question: {request.query}
+
+Please provide a helpful, informative response about their medical bill. Focus on:
+- Answering their specific question if possible
+- Providing relevant context about medical bills
+- Explaining any medical procedures or charges mentioned
+- Being clear about what you can and cannot determine from the document
+- Keeping the response conversational and user-friendly
+
+Response:"""
+                    
+                    response = await client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[{"role": "user", "content": query_prompt}],
+                        max_tokens=400,
+                        temperature=0.7
+                    )
+                    
+                    query_response = response.choices[0].message.content
+                    
+                    logger.info(
+                        "Query processed successfully",
+                        doc_id=request.doc_id,
+                        query_length=len(request.query)
+                    )
+                else:
+                    logger.warning(
+                        "No OCR text available for query processing",
+                        doc_id=request.doc_id
+                    )
+                    query_response = "I couldn't find any text in the document to answer your question."
+            except Exception as e:
+                logger.error(
+                    "Query processing error",
+                    doc_id=request.doc_id,
+                    error=str(e)
+                )
+                query_response = "I'm having trouble processing your question right now."
+        
         return EnhancedAnalysisResponse(
             success=result.get("success", False),
             doc_id=result.get("doc_id", request.doc_id),
@@ -1851,7 +1887,8 @@ async def analyze_document_enhanced(request: EnhancedAnalysisRequest, background
             processing_stages=result.get("processing_stages", {}),
             final_result=result.get("final_result", {}),
             total_processing_time_ms=result.get("total_processing_time_ms", int(processing_time * 1000)),
-            error=result.get("error")
+            error=result.get("error"),
+            query_response=query_response
         )
         
     except Exception as e:
