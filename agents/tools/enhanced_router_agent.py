@@ -25,7 +25,8 @@ from opentelemetry import trace
 
 from .generic_ocr_tool import GenericOCRTool
 from .document_type_classifier import DocumentTypeClassifier, DocumentType, RequiredCapability
-from ..base_agent import BaseAgent, AgentContext, AgentResult, ModelHint
+from ..base_agent import BaseAgent
+from ..interfaces import AgentContext, AgentResult, ModelHint
 from ..agent_registry import AgentRegistry, TaskCapability, AgentRegistration
 from ..router_agent import RouterAgent, RoutingStrategy, RoutingDecision, RoutingRequest
 

@@ -4,7 +4,8 @@ MedBillGuard Agents Package.
 Multi-agent system for medical bill analysis with production-ready infrastructure.
 """
 
-from .base_agent import BaseAgent, AgentContext, AgentResult, ModelHint
+from .base_agent import BaseAgent
+from .interfaces import AgentContext, AgentResult, ModelHint
 from .redis_state import RedisStateManager, DocumentState, AgentResultCache, state_manager
 from .agent_registry import (
     AgentRegistry, 

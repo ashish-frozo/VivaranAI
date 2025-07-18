@@ -19,7 +19,8 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Gauge, Counter
 
-from .base_agent import BaseAgent, AgentContext, ModelHint
+from .base_agent import BaseAgent
+from .interfaces import AgentContext, ModelHint
 from .interfaces import IAgent, AgentCapabilityDeclaration
 from .redis_state import RedisStateManager
 
