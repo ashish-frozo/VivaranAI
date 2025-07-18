@@ -19,7 +19,7 @@ from agents.interfaces import AgentContext, AgentResult, ModelHint
 from agents.interfaces import AgentCapabilityDeclaration, ITool
 from agents.tools.rate_validator_tool import RateValidatorTool
 from agents.tools.generic_ocr_tool import GenericOCRTool
-from agents.tools.production_integration import (
+from agents.tools import (
     DuplicateDetectorTool,
     ProhibitedDetectorTool,
     ConfidenceScorerTool,
