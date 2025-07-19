@@ -592,13 +592,15 @@ async def health_check():
         if router_agent:
             router_health = await router_agent.healthz()
             components["router_agent"] = router_health.get("status", "unknown")
-            # Add detailed router health info
-            components["router_agent_details"] = {
+            # Add detailed router health info as JSON string to satisfy HealthResponse model
+            import json
+            router_details = {
                 "ttl_seconds": router_health.get("ttl_seconds", 0),
                 "active_workflows": router_health.get("active_workflows", 0),
                 "agent_registry_healthy": router_health.get("agent_registry_status", {}).get("healthy", False),
                 "issues_count": len(router_health.get("issues", []))
             }
+            components["router_agent_details"] = json.dumps(router_details)
         else:
             components["router_agent"] = "unhealthy"
     except Exception as e:

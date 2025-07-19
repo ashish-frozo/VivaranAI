@@ -897,6 +897,19 @@ class AgentRegistry:
         for agent_id in stale_agents:
             logger.info("Cleaning up stale agent", agent_id=agent_id)
             await self.deregister_agent(agent_id)
+            
+    async def refresh_agent_cache(self):
+        """Public method to refresh the agent cache.
+        
+        This is a wrapper around the internal _refresh_cache method.
+        """
+        try:
+            await self._refresh_cache()
+            logger.info("Agent cache refreshed successfully")
+            return True
+        except Exception as e:
+            logger.error("Failed to refresh agent cache", error=str(e))
+            return False
 
 
 # Global registry instance
